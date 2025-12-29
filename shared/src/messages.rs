@@ -113,6 +113,8 @@ mod tests {
             price: None,
             time_in_force: TimeInForce::Ioc,
             reduce_only: false,
+            take_profit: None,
+            stop_loss: None,
         });
 
         let json = serde_json::to_string(&payload).unwrap();
@@ -287,6 +289,8 @@ mod tests {
             price: Some(dec!(96000)),
             time_in_force: TimeInForce::PostOnly,
             reduce_only: true,
+            take_profit: None,
+            stop_loss: None,
         }));
 
         let json = serde_json::to_string(&original).unwrap();

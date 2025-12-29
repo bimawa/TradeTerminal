@@ -58,6 +58,8 @@ pub struct OrderRequest {
     pub price: Option<Decimal>,
     pub time_in_force: TimeInForce,
     pub reduce_only: bool,
+    pub take_profit: Option<Decimal>,
+    pub stop_loss: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +188,8 @@ mod tests {
             price: Some(dec!(95000)),
             time_in_force: TimeInForce::Gtc,
             reduce_only: false,
+            take_profit: None,
+            stop_loss: None,
         };
 
         let json = serde_json::to_string(&req).unwrap();
@@ -206,6 +210,8 @@ mod tests {
             price: None,
             time_in_force: TimeInForce::Ioc,
             reduce_only: true,
+            take_profit: None,
+            stop_loss: None,
         };
 
         let json = serde_json::to_string(&req).unwrap();

@@ -120,6 +120,10 @@ struct PlaceOrderRequest {
     time_in_force: String,
     #[serde(rename = "reduceOnly")]
     reduce_only: bool,
+    #[serde(rename = "takeProfit", skip_serializing_if = "Option::is_none")]
+    take_profit: Option<String>,
+    #[serde(rename = "stopLoss", skip_serializing_if = "Option::is_none")]
+    stop_loss: Option<String>,
 }
 
 impl BybitClient {
@@ -228,6 +232,8 @@ impl BybitClient {
                 trade_shared::TimeInForce::PostOnly => "PostOnly".to_string(),
             },
             reduce_only: req.reduce_only,
+            take_profit: req.take_profit.map(|p| p.to_string()),
+            stop_loss: req.stop_loss.map(|p| p.to_string()),
         };
 
         let result: OrderResult = self.post("/v5/order/create", &body).await?;
@@ -285,7 +291,7 @@ impl BybitClient {
     pub async fn get_orders(&self, symbol: Option<&Symbol>) -> Result<Vec<Order>> {
         let params = match symbol {
             Some(s) => format!("category=linear&symbol={}", s.0),
-            None => "category=linear".to_string(),
+            None => "category=linear&settleCoin=USDT".to_string(),
         };
 
         let result: OrderListResult = self.get("/v5/order/realtime", &params).await?;

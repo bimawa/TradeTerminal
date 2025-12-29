@@ -14,6 +14,7 @@ struct PendingRiskOrder {
     risk_usdt: Decimal,
     sl_price: Decimal,
     symbol: String,
+    tp_percent: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,6 +196,8 @@ impl App {
             price,
             time_in_force: TimeInForce::Gtc,
             reduce_only: false,
+            take_profit: None,
+            stop_loss: None,
         };
 
         let msg = ClientMessage::new(ClientPayload::PlaceOrder(req));
@@ -227,16 +230,21 @@ impl App {
             }
         };
 
-        let limit_price = args.get(2).and_then(|p| Decimal::from_str(p).ok());
+        let limit_price = args.get(2).and_then(|p| {
+            if p == &"-" { None } else { Decimal::from_str(p).ok() }
+        });
+
+        let tp_percent = args.get(3).and_then(|p| Decimal::from_str(p).ok());
 
         if let Some(entry_price) = limit_price {
-            self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price)).await?;
+            self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_percent).await?;
         } else {
             self.pending_risk_order = Some(PendingRiskOrder {
                 side,
                 risk_usdt,
                 sl_price,
                 symbol: self.symbol.clone(),
+                tp_percent,
             });
             self.messages.push("Fetching price...".to_string());
             self.refresh_ticker().await?;
@@ -251,6 +259,7 @@ impl App {
         risk_usdt: Decimal,
         sl_price: Decimal,
         limit_price: Option<Decimal>,
+        tp_percent: Option<Decimal>,
     ) -> Result<()> {
         let is_limit = limit_price.is_some();
         let entry_price = limit_price.unwrap_or_else(|| self.last_price.unwrap_or_default());
@@ -278,8 +287,16 @@ impl App {
             }
         };
 
-        let quantity = round_quantity(calc.quantity, 6);
+        let quantity = round_quantity(calc.quantity, 0);
         let order_type = if is_limit { OrderType::Limit } else { OrderType::Market };
+
+        let take_profit = tp_percent.map(|pct| {
+            let multiplier = pct / Decimal::from(100);
+            match side {
+                Side::Buy => entry_price * (Decimal::ONE + multiplier),
+                Side::Sell => entry_price * (Decimal::ONE - multiplier),
+            }
+        });
 
         let req = OrderRequest {
             symbol: Symbol::new(&self.symbol),
@@ -289,18 +306,22 @@ impl App {
             price: limit_price,
             time_in_force: if is_limit { TimeInForce::Gtc } else { TimeInForce::Ioc },
             reduce_only: false,
+            take_profit,
+            stop_loss: Some(sl_price),
         };
 
         let msg = ClientMessage::new(ClientPayload::PlaceOrder(req));
         self.conn_tx.send(msg).await?;
 
+        let tp_str = take_profit.map(|tp| format!(", TP: {:.2}", tp)).unwrap_or_default();
         self.messages.push(format!(
-            "Risk order: {} {} {} @ {} (SL: {}, risk: ${}, qty: {})",
+            "Risk order: {} {} {} @ {} (SL: {}{}, risk: ${}, qty: {})",
             if side == Side::Buy { "LONG" } else { "SHORT" },
             self.symbol,
             if is_limit { "LIMIT" } else { "MARKET" },
             if is_limit { entry_price.to_string() } else { format!("~{}", entry_price) },
             sl_price,
+            tp_str,
             risk_usdt,
             quantity
         ));
@@ -330,6 +351,15 @@ impl App {
         self.refresh_orders().await?;
         self.refresh_positions().await?;
         self.refresh_ticker().await?;
+        Ok(())
+    }
+
+    pub async fn auto_refresh(&mut self) -> Result<()> {
+        if self.connected {
+            self.refresh_ticker().await?;
+            self.refresh_orders().await?;
+            self.refresh_positions().await?;
+        }
         Ok(())
     }
 
@@ -408,6 +438,7 @@ impl App {
                                 pending.risk_usdt,
                                 pending.sl_price,
                                 None,
+                                pending.tp_percent,
                             ).await {
                                 self.messages.push(format!("Order error: {}", e));
                             }

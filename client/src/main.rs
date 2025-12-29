@@ -54,6 +54,9 @@ async fn main() -> Result<()> {
 }
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
+    let mut last_refresh = std::time::Instant::now();
+    let refresh_interval = std::time::Duration::from_secs(1);
+
     loop {
         terminal.draw(|f| ui::draw(f, &app))?;
 
@@ -70,5 +73,10 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
         }
 
         app.process_messages().await?;
+
+        if last_refresh.elapsed() >= refresh_interval {
+            app.auto_refresh().await?;
+            last_refresh = std::time::Instant::now();
+        }
     }
 }
