@@ -36,14 +36,15 @@ struct BybitErrorResponse {
     ret_msg: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct OrderResult {
-    #[serde(rename = "orderId")]
+    #[serde(rename = "orderId", default)]
     order_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct OrderListResult {
+    #[serde(default)]
     list: Vec<BybitOrder>,
 }
 
@@ -67,8 +68,9 @@ struct BybitOrder {
     created_time: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct PositionListResult {
+    #[serde(default)]
     list: Vec<BybitPosition>,
 }
 
@@ -84,8 +86,9 @@ struct BybitPosition {
     leverage: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct TickerListResult {
+    #[serde(default)]
     list: Vec<BybitTicker>,
 }
 
@@ -136,7 +139,7 @@ impl BybitClient {
             .as_millis() as u64
     }
 
-    async fn post<T: for<'de> Deserialize<'de>, B: Serialize>(&self, endpoint: &str, body: &B) -> Result<T> {
+    async fn post<T: for<'de> Deserialize<'de> + Default, B: Serialize>(&self, endpoint: &str, body: &B) -> Result<T> {
         let timestamp = Self::timestamp();
         let body_str = serde_json::to_string(body)?;
         let signature = generate_signature(&self.api_key, &self.api_secret, timestamp, RECV_WINDOW, &body_str);
@@ -169,7 +172,7 @@ impl BybitClient {
         resp.result.context("Empty result from Bybit")
     }
 
-    async fn get<T: for<'de> Deserialize<'de>>(&self, endpoint: &str, params: &str) -> Result<T> {
+    async fn get<T: for<'de> Deserialize<'de> + Default>(&self, endpoint: &str, params: &str) -> Result<T> {
         let timestamp = Self::timestamp();
         let signature = generate_signature(&self.api_key, &self.api_secret, timestamp, RECV_WINDOW, params);
 
@@ -318,7 +321,7 @@ impl BybitClient {
             .context("Ticker not found")
     }
 
-    async fn get_public<T: for<'de> Deserialize<'de>>(&self, endpoint: &str, params: &str) -> Result<T> {
+    async fn get_public<T: for<'de> Deserialize<'de> + Default>(&self, endpoint: &str, params: &str) -> Result<T> {
         let url = format!("{}{}?{}", self.base_url, endpoint, params);
         tracing::debug!("GET (public) {}", url);
 
