@@ -1,16 +1,12 @@
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 use std::str::FromStr;
 use tokio::sync::mpsc;
 use trade_shared::{
-    ClientMessage, ClientPayload, Order, OrderRequest, OrderType, Position, ServerMessage,
-    ServerPayload, Side, Symbol, TimeInForce,
+    calculate_position_size, round_quantity, ClientMessage, ClientPayload, Order, OrderRequest,
+    OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol, TimeInForce,
 };
-
-const TAKER_FEE: Decimal = dec!(0.00055);
-const MAKER_FEE: Decimal = dec!(0.0002);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputMode {
@@ -206,24 +202,23 @@ impl App {
 
     async fn place_risk_order(&mut self, side: Side, args: &[&str]) -> Result<()> {
         let risk_usdt = match Decimal::from_str(args[0]) {
-            Ok(v) if v > Decimal::ZERO => v,
-            _ => {
+            Ok(v) => v,
+            Err(_) => {
                 self.messages.push("Invalid risk amount".to_string());
                 return Ok(());
             }
         };
 
         let sl_price = match Decimal::from_str(args[1]) {
-            Ok(v) if v > Decimal::ZERO => v,
-            _ => {
+            Ok(v) => v,
+            Err(_) => {
                 self.messages.push("Invalid SL price".to_string());
                 return Ok(());
             }
         };
 
         let limit_price = args.get(2).and_then(|p| Decimal::from_str(p).ok());
-        let is_market = limit_price.is_none();
-        let fee = if is_market { TAKER_FEE } else { MAKER_FEE };
+        let is_limit = limit_price.is_some();
 
         let entry_price = match limit_price {
             Some(p) => p,
@@ -236,33 +231,26 @@ impl App {
             }
         };
 
-        let valid_sl = match side {
-            Side::Buy => sl_price < entry_price,
-            Side::Sell => sl_price > entry_price,
+        let calc = match calculate_position_size(risk_usdt, entry_price, sl_price, side, is_limit) {
+            Ok(c) => c,
+            Err(e) => {
+                let msg = match e {
+                    RiskError::InvalidRisk => "Invalid risk amount",
+                    RiskError::InvalidSlPrice => "Invalid SL price",
+                    RiskError::InvalidEntryPrice => "Invalid entry price",
+                    RiskError::SlInvalidForSide => match side {
+                        Side::Buy => "SL must be below entry price for long",
+                        Side::Sell => "SL must be above entry price for short",
+                    },
+                    RiskError::RiskPerUnitTooSmall => "Risk per unit too small",
+                };
+                self.messages.push(msg.to_string());
+                return Ok(());
+            }
         };
 
-        if !valid_sl {
-            let msg = match side {
-                Side::Buy => "SL must be below entry price for long",
-                Side::Sell => "SL must be above entry price for short",
-            };
-            self.messages.push(msg.to_string());
-            return Ok(());
-        }
-
-        let price_diff = (entry_price - sl_price).abs();
-        let fee_cost = entry_price * fee * dec!(2);
-        let total_risk_per_unit = price_diff + fee_cost;
-
-        if total_risk_per_unit <= Decimal::ZERO {
-            self.messages.push("Risk per unit too small".to_string());
-            return Ok(());
-        }
-
-        let quantity = risk_usdt / total_risk_per_unit;
-        let quantity = quantity.round_dp(6);
-
-        let order_type = if is_market { OrderType::Market } else { OrderType::Limit };
+        let quantity = round_quantity(calc.quantity, 6);
+        let order_type = if is_limit { OrderType::Limit } else { OrderType::Market };
 
         let req = OrderRequest {
             symbol: Symbol::new(&self.symbol),
@@ -270,7 +258,7 @@ impl App {
             order_type,
             quantity,
             price: limit_price,
-            time_in_force: if is_market { TimeInForce::Ioc } else { TimeInForce::Gtc },
+            time_in_force: if is_limit { TimeInForce::Gtc } else { TimeInForce::Ioc },
             reduce_only: false,
         };
 
@@ -281,8 +269,8 @@ impl App {
             "Risk order: {} {} {} @ {} (SL: {}, risk: ${}, qty: {})",
             if side == Side::Buy { "LONG" } else { "SHORT" },
             self.symbol,
-            if is_market { "MARKET" } else { "LIMIT" },
-            if is_market { format!("~{}", entry_price) } else { entry_price.to_string() },
+            if is_limit { "LIMIT" } else { "MARKET" },
+            if is_limit { entry_price.to_string() } else { format!("~{}", entry_price) },
             sl_price,
             risk_usdt,
             quantity
