@@ -8,6 +8,14 @@ use trade_shared::{
     OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol, TimeInForce,
 };
 
+#[derive(Debug, Clone)]
+struct PendingRiskOrder {
+    side: Side,
+    risk_usdt: Decimal,
+    sl_price: Decimal,
+    symbol: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputMode {
     Normal,
@@ -33,6 +41,7 @@ pub struct App {
     pub last_price: Option<Decimal>,
     conn_tx: mpsc::Sender<ClientMessage>,
     server_rx: mpsc::Receiver<ServerMessage>,
+    pending_risk_order: Option<PendingRiskOrder>,
 }
 
 impl App {
@@ -52,6 +61,7 @@ impl App {
             last_price: None,
             conn_tx,
             server_rx,
+            pending_risk_order: None,
         }
     }
 
@@ -218,18 +228,37 @@ impl App {
         };
 
         let limit_price = args.get(2).and_then(|p| Decimal::from_str(p).ok());
-        let is_limit = limit_price.is_some();
 
-        let entry_price = match limit_price {
-            Some(p) => p,
-            None => match self.last_price {
-                Some(p) => p,
-                None => {
-                    self.messages.push("No price available. Use limit order or wait for ticker.".to_string());
-                    return Ok(());
-                }
-            }
-        };
+        if let Some(entry_price) = limit_price {
+            self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price)).await?;
+        } else {
+            self.pending_risk_order = Some(PendingRiskOrder {
+                side,
+                risk_usdt,
+                sl_price,
+                symbol: self.symbol.clone(),
+            });
+            self.messages.push("Fetching price...".to_string());
+            self.refresh_ticker().await?;
+        }
+
+        Ok(())
+    }
+
+    async fn execute_risk_order(
+        &mut self,
+        side: Side,
+        risk_usdt: Decimal,
+        sl_price: Decimal,
+        limit_price: Option<Decimal>,
+    ) -> Result<()> {
+        let is_limit = limit_price.is_some();
+        let entry_price = limit_price.unwrap_or_else(|| self.last_price.unwrap_or_default());
+
+        if entry_price.is_zero() {
+            self.messages.push("No price available".to_string());
+            return Ok(());
+        }
 
         let calc = match calculate_position_size(risk_usdt, entry_price, sl_price, side, is_limit) {
             Ok(c) => c,
@@ -370,6 +399,21 @@ impl App {
                 ServerPayload::TickerUpdate(ticker) => {
                     if ticker.symbol.0 == self.symbol {
                         self.last_price = Some(ticker.last_price);
+                    }
+                    if let Some(pending) = self.pending_risk_order.take() {
+                        if ticker.symbol.0 == pending.symbol {
+                            self.last_price = Some(ticker.last_price);
+                            if let Err(e) = self.execute_risk_order(
+                                pending.side,
+                                pending.risk_usdt,
+                                pending.sl_price,
+                                None,
+                            ).await {
+                                self.messages.push(format!("Order error: {}", e));
+                            }
+                        } else {
+                            self.pending_risk_order = Some(pending);
+                        }
                     }
                 }
                 ServerPayload::Pong => {}
