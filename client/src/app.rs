@@ -8,6 +8,13 @@ use trade_shared::{
     OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol, TimeInForce,
 };
 
+const COMMANDS: &[&str] = &[
+    "buy", "sell", "buyrisk", "sellrisk",
+    "cancel", "cancelall", "symbol",
+    "b", "s", "br", "sr", "c", "ca",
+    "positions", "orders", "help",
+];
+
 #[derive(Debug, Clone)]
 struct PendingRiskOrder {
     side: Side,
@@ -399,13 +406,6 @@ impl App {
     }
 
     fn autocomplete(&mut self) {
-        const COMMANDS: &[&str] = &[
-            "buy", "sell", "buyrisk", "sellrisk", 
-            "cancel", "cancelall", "symbol",
-            "b", "s", "br", "sr", "c", "ca",
-            "positions", "orders", "help",
-        ];
-
         let input = self.input.trim();
         if input.is_empty() {
             return;
