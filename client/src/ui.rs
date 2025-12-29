@@ -183,7 +183,7 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
         Line::from(Span::styled(" Risk Order Examples", Style::default().add_modifier(Modifier::BOLD))),
         Line::from("  :br 10 95000           market long, $10 risk, SL@95000"),
         Line::from("  :br 10 95000 96500     limit long @96500, SL@95000"),
-        Line::from("  :br 10 95000 - 2       market long, SL@95000, TP +2%"),
+        Line::from("  :br 10 95000 - 2       market long, $10 risk, SL@95000, limin skip -, TP +2%"),
         Line::from("  :br 10 95000 96500 2   limit @96500, SL@95000, TP +2%"),
     ];
 

@@ -100,6 +100,9 @@ impl App {
                     self.input_mode = InputMode::Normal;
                     self.execute_command(&cmd).await?;
                 }
+                KeyCode::Tab => {
+                    self.autocomplete();
+                }
                 KeyCode::Char(c) => {
                     self.input.push(c);
                 }
@@ -385,14 +388,60 @@ impl App {
 
     fn show_help(&mut self) {
         self.messages.push("Commands:".to_string());
-        self.messages.push("  buy <qty> [price]  - Place buy order".to_string());
-        self.messages.push("  sell <qty> [price] - Place sell order".to_string());
-        self.messages.push("  buyrisk <risk$> <sl> [limit] - Long with risk calc".to_string());
-        self.messages.push("  sellrisk <risk$> <sl> [limit] - Short with risk calc".to_string());
-        self.messages.push("  cancel <id>        - Cancel order".to_string());
-        self.messages.push("  cancelall          - Cancel all orders".to_string());
-        self.messages.push("  symbol <sym>       - Set symbol".to_string());
-        self.messages.push("Keys: Tab=switch, r=refresh, :=command, q=quit".to_string());
+        self.messages.push("  buy <qty> [price]              - Place buy order".to_string());
+        self.messages.push("  sell <qty> [price]             - Place sell order".to_string());
+        self.messages.push("  buyrisk <risk$> <sl> [limit]   - Long with risk calc".to_string());
+        self.messages.push("  sellrisk <risk$> <sl> [limit]  - Short with risk calc".to_string());
+        self.messages.push("  cancel <id>                    - Cancel order".to_string());
+        self.messages.push("  cancelall                      - Cancel all orders".to_string());
+        self.messages.push("  symbol <sym>                   - Set symbol".to_string());
+        self.messages.push("Keys: Tab=autocomplete, r=refresh, :=command, q=quit".to_string());
+    }
+
+    fn autocomplete(&mut self) {
+        const COMMANDS: &[&str] = &[
+            "buy", "sell", "buyrisk", "sellrisk", 
+            "cancel", "cancelall", "symbol",
+            "b", "s", "br", "sr", "c", "ca",
+            "positions", "orders", "help",
+        ];
+
+        let input = self.input.trim();
+        if input.is_empty() {
+            return;
+        }
+
+        let matches: Vec<&str> = COMMANDS
+            .iter()
+            .filter(|cmd| cmd.starts_with(input))
+            .copied()
+            .collect();
+
+        if matches.len() == 1 {
+            self.input = format!("{} ", matches[0]);
+        } else if matches.len() > 1 {
+            let common = Self::common_prefix(&matches);
+            if common.len() > input.len() {
+                self.input = common;
+            }
+        }
+    }
+
+    fn common_prefix(strings: &[&str]) -> String {
+        if strings.is_empty() {
+            return String::new();
+        }
+        let first = strings[0];
+        let mut prefix_len = first.len();
+        for s in &strings[1..] {
+            prefix_len = first
+                .chars()
+                .zip(s.chars())
+                .take_while(|(a, b)| a == b)
+                .count()
+                .min(prefix_len);
+        }
+        first[..prefix_len].to_string()
     }
 
     pub async fn process_messages(&mut self) -> Result<()> {
