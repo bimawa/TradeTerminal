@@ -327,6 +327,33 @@ impl BybitClient {
             .context("Ticker not found")
     }
 
+    pub async fn set_trailing_stop(
+        &self,
+        symbol: &Symbol,
+        trailing_stop: Decimal,
+        active_price: Option<Decimal>,
+    ) -> Result<()> {
+        #[derive(Serialize)]
+        struct TradingStopRequest {
+            category: String,
+            symbol: String,
+            #[serde(rename = "trailingStop")]
+            trailing_stop: String,
+            #[serde(rename = "activePrice", skip_serializing_if = "Option::is_none")]
+            active_price: Option<String>,
+        }
+
+        let body = TradingStopRequest {
+            category: "linear".to_string(),
+            symbol: symbol.0.clone(),
+            trailing_stop: trailing_stop.to_string(),
+            active_price: active_price.map(|p| p.to_string()),
+        };
+
+        let _: serde_json::Value = self.post("/v5/position/trading-stop", &body).await?;
+        Ok(())
+    }
+
     async fn get_public<T: for<'de> Deserialize<'de> + Default>(&self, endpoint: &str, params: &str) -> Result<T> {
         let url = format!("{}{}?{}", self.base_url, endpoint, params);
         tracing::debug!("GET (public) {}", url);

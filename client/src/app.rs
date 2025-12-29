@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 use trade_shared::{
     calculate_position_size, round_quantity, ClientMessage, ClientPayload, Order, OrderRequest,
     OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol, TimeInForce,
+    TrailingStopRequest,
 };
 
 struct Cmd {
@@ -23,6 +24,7 @@ const COMMANDS: &[Cmd] = &[
     Cmd { name: "symbol", aliases: &["sym"] },
     Cmd { name: "positions", aliases: &["pos"] },
     Cmd { name: "orders", aliases: &["ord"] },
+    Cmd { name: "ts", aliases: &[] },
     Cmd { name: "help", aliases: &["h"] },
 ];
 
@@ -53,6 +55,28 @@ struct PendingRiskOrder {
     tp_percent: Option<Decimal>,
 }
 
+#[derive(Debug, Clone)]
+struct PendingAction {
+    symbol: String,
+    side: Side,
+    action: String,
+}
+
+#[derive(Debug, Clone)]
+enum Value {
+    Percent(Decimal),
+    Absolute(Decimal),
+}
+
+fn parse_value(s: &str) -> Option<Value> {
+    if s.ends_with('%') {
+        let num = s.trim_end_matches('%');
+        Decimal::from_str(num).ok().map(Value::Percent)
+    } else {
+        Decimal::from_str(s).ok().map(Value::Absolute)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputMode {
     Normal,
@@ -79,6 +103,7 @@ pub struct App {
     conn_tx: mpsc::Sender<ClientMessage>,
     server_rx: mpsc::Receiver<ServerMessage>,
     pending_risk_order: Option<PendingRiskOrder>,
+    pending_action: Option<PendingAction>,
 }
 
 impl App {
@@ -99,6 +124,7 @@ impl App {
             conn_tx,
             server_rx,
             pending_risk_order: None,
+            pending_action: None,
         }
     }
 
@@ -161,6 +187,20 @@ impl App {
             }
             return Ok(());
         }
+
+        if cmd.contains('|') {
+            let parts: Vec<&str> = cmd.split('|').map(|s| s.trim()).collect();
+            if parts.len() >= 2 {
+                self.pending_action = Some(PendingAction {
+                    symbol: self.symbol.clone(),
+                    side: Side::Buy,
+                    action: parts[1..].join("|"),
+                });
+                self.execute_single_command(parts[0]).await?;
+                return Ok(());
+            }
+        }
+
         self.execute_single_command(cmd).await
     }
 
@@ -223,6 +263,13 @@ impl App {
             }
             Some("help") => {
                 self.show_help();
+            }
+            Some("ts") => {
+                if parts.len() >= 3 {
+                    self.set_trailing_stop(&parts[1..]).await?;
+                } else {
+                    self.messages.push("Usage: ts <trigger> <callback> (use % for percent)".to_string());
+                }
             }
             _ => {
                 self.messages.push(format!("Unknown command: {}", parts[0]));
@@ -401,6 +448,58 @@ impl App {
         Ok(())
     }
 
+    async fn set_trailing_stop(&mut self, args: &[&str]) -> Result<()> {
+        let trigger = match parse_value(args[0]) {
+            Some(v) => v,
+            None => {
+                self.messages.push("Invalid trigger value".to_string());
+                return Ok(());
+            }
+        };
+
+        let callback = match parse_value(args[1]) {
+            Some(v) => v,
+            None => {
+                self.messages.push("Invalid callback value".to_string());
+                return Ok(());
+            }
+        };
+
+        let entry_price = match self.last_price {
+            Some(p) => p,
+            None => {
+                self.messages.push("No price available".to_string());
+                return Ok(());
+            }
+        };
+
+        let active_price = match trigger {
+            Value::Percent(pct) => entry_price * (Decimal::ONE + pct / Decimal::from(100)),
+            Value::Absolute(price) => price,
+        };
+
+        let trailing_stop = match callback {
+            Value::Percent(pct) => entry_price * pct / Decimal::from(100),
+            Value::Absolute(val) => val,
+        };
+
+        let req = TrailingStopRequest {
+            symbol: Symbol::new(&self.symbol),
+            trailing_stop,
+            active_price: Some(active_price),
+        };
+
+        let msg = ClientMessage::new(ClientPayload::SetTrailingStop(req));
+        self.conn_tx.send(msg).await?;
+
+        self.messages.push(format!(
+            "Setting TS: trigger@{:.2}, callback {:.2}",
+            active_price, trailing_stop
+        ));
+
+        Ok(())
+    }
+
     async fn refresh(&mut self) -> Result<()> {
         self.refresh_orders().await?;
         self.refresh_positions().await?;
@@ -512,7 +611,23 @@ impl App {
                     self.orders = orders;
                 }
                 ServerPayload::Positions(positions) => {
+                    let had_position = self.positions.iter().any(|p| p.symbol.0 == self.symbol);
+                    let has_position = positions.iter().any(|p| p.symbol.0 == self.symbol);
                     self.positions = positions;
+                    
+                    if !had_position && has_position {
+                        if let Some(pending) = self.pending_action.take() {
+                            if pending.symbol == self.symbol {
+                                self.messages.push(format!("Position opened, executing: {}", pending.action));
+                                if let Err(e) = self.execute_single_command(&pending.action).await {
+                                    self.messages.push(format!("Pending action error: {}", e));
+                                }
+                            }
+                        }
+                    }
+                }
+                ServerPayload::TrailingStopSet { symbol } => {
+                    self.messages.push(format!("Trailing stop set for {}", symbol.0));
                 }
                 ServerPayload::OrderError { message } => {
                     self.messages.push(format!("Order error: {}", message));

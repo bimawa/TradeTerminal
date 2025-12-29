@@ -45,6 +45,18 @@ impl ClientHandler {
                 }
             }
 
+            ClientPayload::SetTrailingStop(req) => {
+                match self.bybit.set_trailing_stop(&req.symbol, req.trailing_stop, req.active_price).await {
+                    Ok(_) => ServerMessage::new(ServerPayload::TrailingStopSet {
+                        symbol: req.symbol,
+                    }),
+                    Err(e) => ServerMessage::new(ServerPayload::Error {
+                        code: 1,
+                        message: e.to_string(),
+                    }),
+                }
+            }
+
             ClientPayload::GetPositions => match self.bybit.get_positions(None).await {
                 Ok(positions) => ServerMessage::new(ServerPayload::Positions(positions)),
                 Err(e) => ServerMessage::new(ServerPayload::Error {

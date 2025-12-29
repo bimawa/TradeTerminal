@@ -15,6 +15,7 @@ pub enum ClientPayload {
     PlaceOrder(OrderRequest),
     CancelOrder { order_id: String },
     CancelAllOrders { symbol: Option<Symbol> },
+    SetTrailingStop(TrailingStopRequest),
     GetPositions,
     GetOrders { symbol: Option<Symbol> },
     GetAccountInfo,
@@ -22,6 +23,13 @@ pub enum ClientPayload {
     Subscribe { symbols: Vec<Symbol> },
     Unsubscribe { symbols: Vec<Symbol> },
     Ping,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrailingStopRequest {
+    pub symbol: Symbol,
+    pub trailing_stop: rust_decimal::Decimal,
+    pub active_price: Option<rust_decimal::Decimal>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +46,7 @@ pub enum ServerPayload {
     OrderCancelled { order_id: String },
     OrderUpdate(Order),
     OrderError { message: String },
+    TrailingStopSet { symbol: Symbol },
     Positions(Vec<Position>),
     Orders(Vec<Order>),
     AccountInfo(AccountInfo),
