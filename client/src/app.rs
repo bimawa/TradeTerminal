@@ -8,12 +8,41 @@ use trade_shared::{
     OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol, TimeInForce,
 };
 
-const COMMANDS: &[&str] = &[
-    "buy", "sell", "buyrisk", "sellrisk",
-    "cancel", "cancelall", "symbol",
-    "b", "s", "br", "sr", "c", "ca",
-    "positions", "orders", "help",
+struct Cmd {
+    name: &'static str,
+    aliases: &'static [&'static str],
+}
+
+const COMMANDS: &[Cmd] = &[
+    Cmd { name: "buy", aliases: &["b"] },
+    Cmd { name: "sell", aliases: &["s"] },
+    Cmd { name: "buyrisk", aliases: &["br"] },
+    Cmd { name: "sellrisk", aliases: &["sr"] },
+    Cmd { name: "cancel", aliases: &["c"] },
+    Cmd { name: "cancelall", aliases: &["ca"] },
+    Cmd { name: "symbol", aliases: &["sym"] },
+    Cmd { name: "positions", aliases: &["pos"] },
+    Cmd { name: "orders", aliases: &["ord"] },
+    Cmd { name: "help", aliases: &["h"] },
 ];
+
+fn match_command(input: &str) -> Option<&'static str> {
+    for cmd in COMMANDS {
+        if cmd.name == input || cmd.aliases.contains(&input) {
+            return Some(cmd.name);
+        }
+    }
+    None
+}
+
+fn all_command_names() -> Vec<&'static str> {
+    let mut names = Vec::new();
+    for cmd in COMMANDS {
+        names.push(cmd.name);
+        names.extend(cmd.aliases.iter());
+    }
+    names
+}
 
 #[derive(Debug, Clone)]
 struct PendingRiskOrder {
@@ -128,26 +157,28 @@ impl App {
             return Ok(());
         }
 
-        match parts[0] {
-            "buy" | "b" => {
+        let command = match_command(parts[0]);
+
+        match command {
+            Some("buy") => {
                 if parts.len() >= 2 {
                     self.place_order(Side::Buy, &parts[1..]).await?;
                 }
             }
-            "sell" | "s" => {
+            Some("sell") => {
                 if parts.len() >= 2 {
                     self.place_order(Side::Sell, &parts[1..]).await?;
                 }
             }
-            "cancel" | "c" => {
+            Some("cancel") => {
                 if parts.len() >= 2 {
                     self.cancel_order(parts[1]).await?;
                 }
             }
-            "cancelall" | "ca" => {
+            Some("cancelall") => {
                 self.cancel_all_orders().await?;
             }
-            "symbol" | "sym" => {
+            Some("symbol") => {
                 if parts.len() >= 2 {
                     self.symbol = parts[1].to_uppercase();
                     self.last_price = None;
@@ -155,29 +186,29 @@ impl App {
                     self.refresh_ticker().await?;
                 }
             }
-            "positions" | "pos" => {
+            Some("positions") => {
                 self.tab = Tab::Positions;
                 self.refresh_positions().await?;
             }
-            "orders" | "ord" => {
+            Some("orders") => {
                 self.tab = Tab::Orders;
                 self.refresh_orders().await?;
             }
-            "buyrisk" | "br" => {
+            Some("buyrisk") => {
                 if parts.len() >= 3 {
                     self.place_risk_order(Side::Buy, &parts[1..]).await?;
                 } else {
                     self.messages.push("Usage: buyrisk <risk_usdt> <sl_price> [limit_price]".to_string());
                 }
             }
-            "sellrisk" | "sr" => {
+            Some("sellrisk") => {
                 if parts.len() >= 3 {
                     self.place_risk_order(Side::Sell, &parts[1..]).await?;
                 } else {
                     self.messages.push("Usage: sellrisk <risk_usdt> <sl_price> [limit_price]".to_string());
                 }
             }
-            "help" | "h" => {
+            Some("help") => {
                 self.show_help();
             }
             _ => {
@@ -411,7 +442,8 @@ impl App {
             return;
         }
 
-        let matches: Vec<&str> = COMMANDS
+        let all_names = all_command_names();
+        let matches: Vec<&str> = all_names
             .iter()
             .filter(|cmd| cmd.starts_with(input))
             .copied()
