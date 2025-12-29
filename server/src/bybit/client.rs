@@ -24,7 +24,16 @@ struct BybitResponse<T> {
     ret_code: i32,
     #[serde(rename = "retMsg")]
     ret_msg: String,
+    #[serde(default)]
     result: Option<T>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BybitErrorResponse {
+    #[serde(rename = "retCode")]
+    ret_code: i32,
+    #[serde(rename = "retMsg")]
+    ret_msg: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +142,8 @@ impl BybitClient {
         let signature = generate_signature(&self.api_key, &self.api_secret, timestamp, RECV_WINDOW, &body_str);
 
         let url = format!("{}{}", self.base_url, endpoint);
+        tracing::debug!("POST {} body: {}", url, body_str);
+        
         let response = self
             .client
             .post(&url)
@@ -146,10 +157,15 @@ impl BybitClient {
             .await
             .context("Failed to send request")?;
 
-        let resp: BybitResponse<T> = response.json().await.context("Failed to parse response")?;
-        if resp.ret_code != 0 {
-            anyhow::bail!("Bybit error {}: {}", resp.ret_code, resp.ret_msg);
+        let resp_text = response.text().await.context("Failed to read response")?;
+        tracing::debug!("Response: {}", resp_text);
+        
+        let err_resp: BybitErrorResponse = serde_json::from_str(&resp_text).context("Failed to parse response")?;
+        if err_resp.ret_code != 0 {
+            anyhow::bail!("Bybit error {}: {}", err_resp.ret_code, err_resp.ret_msg);
         }
+        
+        let resp: BybitResponse<T> = serde_json::from_str(&resp_text).context("Failed to parse result")?;
         resp.result.context("Empty result from Bybit")
     }
 
@@ -163,6 +179,8 @@ impl BybitClient {
             format!("{}{}?{}", self.base_url, endpoint, params)
         };
 
+        tracing::debug!("GET {}", url);
+        
         let response = self
             .client
             .get(&url)
@@ -174,10 +192,15 @@ impl BybitClient {
             .await
             .context("Failed to send request")?;
 
-        let resp: BybitResponse<T> = response.json().await.context("Failed to parse response")?;
-        if resp.ret_code != 0 {
-            anyhow::bail!("Bybit error {}: {}", resp.ret_code, resp.ret_msg);
+        let resp_text = response.text().await.context("Failed to read response")?;
+        tracing::debug!("Response: {}", resp_text);
+        
+        let err_resp: BybitErrorResponse = serde_json::from_str(&resp_text).context("Failed to parse response")?;
+        if err_resp.ret_code != 0 {
+            anyhow::bail!("Bybit error {}: {}", err_resp.ret_code, err_resp.ret_msg);
         }
+        
+        let resp: BybitResponse<T> = serde_json::from_str(&resp_text).context("Failed to parse result")?;
         resp.result.context("Empty result from Bybit")
     }
 
@@ -297,6 +320,7 @@ impl BybitClient {
 
     async fn get_public<T: for<'de> Deserialize<'de>>(&self, endpoint: &str, params: &str) -> Result<T> {
         let url = format!("{}{}?{}", self.base_url, endpoint, params);
+        tracing::debug!("GET (public) {}", url);
 
         let response = self
             .client
@@ -305,10 +329,15 @@ impl BybitClient {
             .await
             .context("Failed to send request")?;
 
-        let resp: BybitResponse<T> = response.json().await.context("Failed to parse response")?;
-        if resp.ret_code != 0 {
-            anyhow::bail!("Bybit error {}: {}", resp.ret_code, resp.ret_msg);
+        let resp_text = response.text().await.context("Failed to read response")?;
+        tracing::debug!("Response: {}", resp_text);
+        
+        let err_resp: BybitErrorResponse = serde_json::from_str(&resp_text).context("Failed to parse response")?;
+        if err_resp.ret_code != 0 {
+            anyhow::bail!("Bybit error {}: {}", err_resp.ret_code, err_resp.ret_msg);
         }
+        
+        let resp: BybitResponse<T> = serde_json::from_str(&resp_text).context("Failed to parse result")?;
         resp.result.context("Empty result from Bybit")
     }
 }
