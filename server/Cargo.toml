@@ -1,0 +1,30 @@
+[package]
+name = "trade-server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "trade-server"
+path = "src/main.rs"
+
+[dependencies]
+trade-shared = { path = "../shared" }
+
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+reqwest = { version = "0.12", features = ["json"] }
+url = "2.5"
