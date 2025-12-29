@@ -71,6 +71,16 @@ impl ClientHandler {
                 }))
             }
 
+            ClientPayload::GetTicker { symbol } => {
+                match self.bybit.get_ticker(&symbol).await {
+                    Ok(ticker) => ServerMessage::new(ServerPayload::TickerUpdate(ticker)),
+                    Err(e) => ServerMessage::new(ServerPayload::Error {
+                        code: 1,
+                        message: e.to_string(),
+                    }),
+                }
+            }
+
             ClientPayload::Subscribe { symbols: _ } => {
                 ServerMessage::new(ServerPayload::Connected)
             }

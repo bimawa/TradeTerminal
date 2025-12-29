@@ -1,12 +1,16 @@
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use std::str::FromStr;
 use tokio::sync::mpsc;
 use trade_shared::{
     ClientMessage, ClientPayload, Order, OrderRequest, OrderType, Position, ServerMessage,
     ServerPayload, Side, Symbol, TimeInForce,
 };
+
+const TAKER_FEE: Decimal = dec!(0.00055);
+const MAKER_FEE: Decimal = dec!(0.0002);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputMode {
@@ -129,7 +133,9 @@ impl App {
             "symbol" | "sym" => {
                 if parts.len() >= 2 {
                     self.symbol = parts[1].to_uppercase();
+                    self.last_price = None;
                     self.messages.push(format!("Symbol: {}", self.symbol));
+                    self.refresh_ticker().await?;
                 }
             }
             "positions" | "pos" => {
@@ -139,6 +145,20 @@ impl App {
             "orders" | "ord" => {
                 self.tab = Tab::Orders;
                 self.refresh_orders().await?;
+            }
+            "buyrisk" | "br" => {
+                if parts.len() >= 3 {
+                    self.place_risk_order(Side::Buy, &parts[1..]).await?;
+                } else {
+                    self.messages.push("Usage: buyrisk <risk_usdt> <sl_price> [limit_price]".to_string());
+                }
+            }
+            "sellrisk" | "sr" => {
+                if parts.len() >= 3 {
+                    self.place_risk_order(Side::Sell, &parts[1..]).await?;
+                } else {
+                    self.messages.push("Usage: sellrisk <risk_usdt> <sl_price> [limit_price]".to_string());
+                }
             }
             "help" | "h" => {
                 self.show_help();
@@ -184,6 +204,93 @@ impl App {
         Ok(())
     }
 
+    async fn place_risk_order(&mut self, side: Side, args: &[&str]) -> Result<()> {
+        let risk_usdt = match Decimal::from_str(args[0]) {
+            Ok(v) if v > Decimal::ZERO => v,
+            _ => {
+                self.messages.push("Invalid risk amount".to_string());
+                return Ok(());
+            }
+        };
+
+        let sl_price = match Decimal::from_str(args[1]) {
+            Ok(v) if v > Decimal::ZERO => v,
+            _ => {
+                self.messages.push("Invalid SL price".to_string());
+                return Ok(());
+            }
+        };
+
+        let limit_price = args.get(2).and_then(|p| Decimal::from_str(p).ok());
+        let is_market = limit_price.is_none();
+        let fee = if is_market { TAKER_FEE } else { MAKER_FEE };
+
+        let entry_price = match limit_price {
+            Some(p) => p,
+            None => match self.last_price {
+                Some(p) => p,
+                None => {
+                    self.messages.push("No price available. Use limit order or wait for ticker.".to_string());
+                    return Ok(());
+                }
+            }
+        };
+
+        let valid_sl = match side {
+            Side::Buy => sl_price < entry_price,
+            Side::Sell => sl_price > entry_price,
+        };
+
+        if !valid_sl {
+            let msg = match side {
+                Side::Buy => "SL must be below entry price for long",
+                Side::Sell => "SL must be above entry price for short",
+            };
+            self.messages.push(msg.to_string());
+            return Ok(());
+        }
+
+        let price_diff = (entry_price - sl_price).abs();
+        let fee_cost = entry_price * fee * dec!(2);
+        let total_risk_per_unit = price_diff + fee_cost;
+
+        if total_risk_per_unit <= Decimal::ZERO {
+            self.messages.push("Risk per unit too small".to_string());
+            return Ok(());
+        }
+
+        let quantity = risk_usdt / total_risk_per_unit;
+        let quantity = quantity.round_dp(6);
+
+        let order_type = if is_market { OrderType::Market } else { OrderType::Limit };
+
+        let req = OrderRequest {
+            symbol: Symbol::new(&self.symbol),
+            side,
+            order_type,
+            quantity,
+            price: limit_price,
+            time_in_force: if is_market { TimeInForce::Ioc } else { TimeInForce::Gtc },
+            reduce_only: false,
+        };
+
+        let msg = ClientMessage::new(ClientPayload::PlaceOrder(req));
+        self.conn_tx.send(msg).await?;
+
+        self.messages.push(format!(
+            "Risk order: {} {} {} @ {} (SL: {}, risk: ${}, qty: {})",
+            if side == Side::Buy { "LONG" } else { "SHORT" },
+            self.symbol,
+            if is_market { "MARKET" } else { "LIMIT" },
+            if is_market { format!("~{}", entry_price) } else { entry_price.to_string() },
+            sl_price,
+            risk_usdt,
+            quantity
+        ));
+
+        Ok(())
+    }
+
     async fn cancel_order(&mut self, order_id: &str) -> Result<()> {
         let msg = ClientMessage::new(ClientPayload::CancelOrder {
             order_id: order_id.to_string(),
@@ -205,6 +312,15 @@ impl App {
     async fn refresh(&mut self) -> Result<()> {
         self.refresh_orders().await?;
         self.refresh_positions().await?;
+        self.refresh_ticker().await?;
+        Ok(())
+    }
+
+    async fn refresh_ticker(&mut self) -> Result<()> {
+        let msg = ClientMessage::new(ClientPayload::GetTicker {
+            symbol: Symbol::new(&self.symbol),
+        });
+        self.conn_tx.send(msg).await?;
         Ok(())
     }
 
@@ -224,11 +340,11 @@ impl App {
         self.messages.push("Commands:".to_string());
         self.messages.push("  buy <qty> [price]  - Place buy order".to_string());
         self.messages.push("  sell <qty> [price] - Place sell order".to_string());
+        self.messages.push("  buyrisk <risk$> <sl> [limit] - Long with risk calc".to_string());
+        self.messages.push("  sellrisk <risk$> <sl> [limit] - Short with risk calc".to_string());
         self.messages.push("  cancel <id>        - Cancel order".to_string());
         self.messages.push("  cancelall          - Cancel all orders".to_string());
         self.messages.push("  symbol <sym>       - Set symbol".to_string());
-        self.messages.push("  positions          - Show positions".to_string());
-        self.messages.push("  orders             - Show orders".to_string());
         self.messages.push("Keys: Tab=switch, r=refresh, :=command, q=quit".to_string());
     }
 

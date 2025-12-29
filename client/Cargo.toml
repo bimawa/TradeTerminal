@@ -20,6 +20,7 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 rust_decimal.workspace = true
+rust_decimal_macros = "1.36"
 
 ratatui = "0.29"
 crossterm = "0.28"

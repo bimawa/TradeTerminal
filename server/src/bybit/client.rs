@@ -3,7 +3,7 @@ use reqwest::Client;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use trade_shared::{Order, OrderRequest, OrderStatus, OrderType, Position, Side, Symbol};
+use trade_shared::{Order, OrderRequest, OrderStatus, OrderType, Position, Side, Symbol, Ticker};
 
 use super::sign::generate_signature;
 use crate::config::Config;
@@ -73,6 +73,25 @@ struct BybitPosition {
     #[serde(rename = "unrealisedPnl")]
     unrealised_pnl: String,
     leverage: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TickerListResult {
+    list: Vec<BybitTicker>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BybitTicker {
+    #[serde(rename = "lastPrice")]
+    last_price: String,
+    #[serde(rename = "bid1Price")]
+    bid_price: String,
+    #[serde(rename = "ask1Price")]
+    ask_price: String,
+    #[serde(rename = "volume24h")]
+    volume_24h: String,
+    #[serde(rename = "price24hPcnt")]
+    price_change_24h: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -263,6 +282,35 @@ impl BybitClient {
             .map(|p| convert_position(p))
             .collect())
     }
+
+    pub async fn get_ticker(&self, symbol: &Symbol) -> Result<Ticker> {
+        let params = format!("category=linear&symbol={}", symbol.0);
+        let result: TickerListResult = self.get_public("/v5/market/tickers", &params).await?;
+        
+        result
+            .list
+            .into_iter()
+            .next()
+            .map(|t| convert_ticker(t, symbol))
+            .context("Ticker not found")
+    }
+
+    async fn get_public<T: for<'de> Deserialize<'de>>(&self, endpoint: &str, params: &str) -> Result<T> {
+        let url = format!("{}{}?{}", self.base_url, endpoint, params);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to send request")?;
+
+        let resp: BybitResponse<T> = response.json().await.context("Failed to parse response")?;
+        if resp.ret_code != 0 {
+            anyhow::bail!("Bybit error {}: {}", resp.ret_code, resp.ret_msg);
+        }
+        resp.result.context("Empty result from Bybit")
+    }
 }
 
 fn convert_order(o: BybitOrder) -> Order {
@@ -295,5 +343,16 @@ fn convert_position(p: BybitPosition) -> Position {
         entry_price: p.avg_price.parse().unwrap_or_default(),
         unrealized_pnl: p.unrealised_pnl.parse().unwrap_or_default(),
         leverage: p.leverage.parse().unwrap_or(1),
+    }
+}
+
+fn convert_ticker(t: BybitTicker, symbol: &Symbol) -> Ticker {
+    Ticker {
+        symbol: symbol.clone(),
+        last_price: t.last_price.parse().unwrap_or_default(),
+        bid_price: t.bid_price.parse().unwrap_or_default(),
+        ask_price: t.ask_price.parse().unwrap_or_default(),
+        volume_24h: t.volume_24h.parse().unwrap_or_default(),
+        price_change_24h: t.price_change_24h.parse().unwrap_or_default(),
     }
 }

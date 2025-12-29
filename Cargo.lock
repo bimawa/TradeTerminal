@@ -1394,6 +1394,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust_decimal_macros"
+version = "1.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae8c0cb48f413ebe24dc2d148788e0efbe09ba3e011d9277162f2eaf8e1069a3"
+dependencies = [
+ "quote",
+ "syn 2.0.111",
+]
+
+[[package]]
 name = "rustix"
 version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2082,6 +2092,7 @@ dependencies = [
  "futures-util",
  "ratatui",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde",
  "serde_json",
  "thiserror 2.0.17",

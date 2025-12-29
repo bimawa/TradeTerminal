@@ -18,6 +18,7 @@ pub enum ClientPayload {
     GetPositions,
     GetOrders { symbol: Option<Symbol> },
     GetAccountInfo,
+    GetTicker { symbol: Symbol },
     Subscribe { symbols: Vec<Symbol> },
     Unsubscribe { symbols: Vec<Symbol> },
     Ping,
