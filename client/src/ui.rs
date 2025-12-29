@@ -161,7 +161,11 @@ fn draw_positions(f: &mut Frame, app: &App, area: Rect) {
 fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Percentage(40),
+            Constraint::Percentage(35),
+            Constraint::Percentage(25),
+        ])
         .split(area);
 
     let help_text = vec![
@@ -171,46 +175,61 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
             Span::raw(&app.symbol),
         ]),
         Line::from(""),
-        Line::from(Span::styled("Quick Commands:", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("Commands:", Style::default().add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from("  :buy <qty> [price]       - Buy order"),
-        Line::from("  :sell <qty> [price]      - Sell order"),
+        Line::from("  :buy <qty> [price]"),
+        Line::from("  :sell <qty> [price]"),
         Line::from("  :buyrisk <risk$> <sl> [limit] [tp%]"),
-        Line::from("                           - Long with risk calc"),
         Line::from("  :sellrisk <risk$> <sl> [limit] [tp%]"),
-        Line::from("                           - Short with risk calc"),
-        Line::from("  :cancel <id>             - Cancel order"),
-        Line::from("  :cancelall               - Cancel all"),
-        Line::from("  :symbol <sym>            - Change symbol"),
+        Line::from("  :cancel <id>"),
+        Line::from("  :cancelall"),
+        Line::from("  :symbol <sym>"),
         Line::from(""),
         Line::from(Span::styled("Shortcuts:", Style::default().add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from("  :b  = :buy       :br = :buyrisk"),
-        Line::from("  :s  = :sell      :sr = :sellrisk"),
-        Line::from("  :c  = :cancel    :ca = :cancelall"),
+        Line::from("  :b :s :br :sr :c :ca"),
     ];
 
     let help = Paragraph::new(help_text)
         .block(Block::default().borders(Borders::ALL).title(" Trade "));
 
+    let examples_text = vec![
+        Line::from(""),
+        Line::from(Span::styled("Risk Order Examples:", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("  :br 10 95000"),
+        Line::from("    Market long, $10 risk, SL 95000"),
+        Line::from(""),
+        Line::from("  :br 10 95000 96500"),
+        Line::from("    Limit long @96500, SL 95000"),
+        Line::from(""),
+        Line::from("  :br 10 95000 - 2"),
+        Line::from("    Market long, SL 95000, TP +2%"),
+        Line::from(""),
+        Line::from("  :br 10 95000 96500 2"),
+        Line::from("    Limit @96500, SL 95000, TP +2%"),
+    ];
+
+    let examples = Paragraph::new(examples_text)
+        .block(Block::default().borders(Borders::ALL).title(" Examples "));
+
     let keys_text = vec![
         Line::from(""),
-        Line::from(Span::styled("Keyboard:", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("Keys:", Style::default().add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from("  Tab       - Switch tabs"),
-        Line::from("  r         - Refresh data"),
-        Line::from("  :         - Enter command mode"),
-        Line::from("  Esc       - Exit command mode"),
-        Line::from("  Enter     - Execute command"),
-        Line::from("  q         - Quit"),
-        Line::from("  Ctrl+C    - Force quit"),
+        Line::from("  Tab    - Switch tabs"),
+        Line::from("  r      - Refresh"),
+        Line::from("  :      - Command mode"),
+        Line::from("  Esc    - Exit mode"),
+        Line::from("  Enter  - Execute"),
+        Line::from("  q      - Quit"),
     ];
 
     let keys = Paragraph::new(keys_text)
         .block(Block::default().borders(Borders::ALL).title(" Keys "));
 
     f.render_widget(help, chunks[0]);
-    f.render_widget(keys, chunks[1]);
+    f.render_widget(examples, chunks[1]);
+    f.render_widget(keys, chunks[2]);
 }
 
 fn draw_messages(f: &mut Frame, app: &App, area: Rect) {
