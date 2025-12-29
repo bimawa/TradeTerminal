@@ -152,6 +152,19 @@ impl App {
     }
 
     async fn execute_command(&mut self, cmd: &str) -> Result<()> {
+        if cmd.contains(';') {
+            for sub_cmd in cmd.split(';') {
+                let sub_cmd = sub_cmd.trim();
+                if !sub_cmd.is_empty() {
+                    self.execute_single_command(sub_cmd).await?;
+                }
+            }
+            return Ok(());
+        }
+        self.execute_single_command(cmd).await
+    }
+
+    async fn execute_single_command(&mut self, cmd: &str) -> Result<()> {
         let parts: Vec<&str> = cmd.split_whitespace().collect();
         if parts.is_empty() {
             return Ok(());
