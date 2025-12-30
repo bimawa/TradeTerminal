@@ -1,63 +1,66 @@
-# TradeTerminal
+# CLAUDE.md
 
-Торговый терминал для Bybit. Rust workspace с двумя проектами: server и client.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Архитектура
+## Project Overview
 
-- **server** — VPS-сервер, подключается к Bybit API с минимальной задержкой
-- **client** — CLI терминал на ratatui, подключается к серверу по WebSocket
-- **shared** — общие типы и протокол сообщений
+TradeTerminal — торговый терминал для Bybit с архитектурой клиент-сервер. Сервер размещается на VPS рядом с биржей для минимальной задержки, клиент — CLI на ratatui.
 
-## Технологии
+## Build & Run Commands
 
-- Rust 2021 edition
-- tokio (async runtime)
-- tokio-tungstenite (WebSocket)
-- ratatui + crossterm (TUI)
-- rust_decimal (точные вычисления)
-- serde/serde_json (сериализация)
-
-## Структура проекта
-
-```
-TradeTerminal/
-├── Cargo.toml              # Workspace
-├── shared/                 # Общие типы (Order, Position, Ticker, Messages)
-├── server/                 # Сервер для VPS
-│   └── src/
-│       ├── bybit/          # Bybit REST + WebSocket клиент
-│       ├── client_handler.rs
-│       └── server.rs
-└── client/                 # CLI терминал
-    └── src/
-        ├── app.rs          # Логика, команды
-        ├── connection.rs   # WebSocket к серверу
-        └── ui.rs           # Рендеринг UI
+```bash
+just server          # Запуск сервера локально
+just client          # Запуск клиента
+just build           # cargo build --release
+just test            # cargo test
+just lint            # cargo clippy
+just fmt             # cargo fmt
+just docker-up       # docker-compose up -d
 ```
 
-## Команды клиента
+Переменные окружения (из .env):
+- `BYBIT_API_KEY`, `BYBIT_API_SECRET`, `BYBIT_TESTNET`
+- `SERVER_URL` — WebSocket URL сервера для клиента
 
-| Команда | Сокращение | Описание |
-|---------|------------|----------|
-| `buy <qty> [price]` | `b` | Ордер на покупку |
-| `sell <qty> [price]` | `s` | Ордер на продажу |
-| `buyrisk <risk$> <sl> [limit]` | `br` | Long с расчётом от риска |
-| `sellrisk <risk$> <sl> [limit]` | `sr` | Short с расчётом от риска |
-| `cancel <id>` | `c` | Отменить ордер |
-| `cancelall` | `ca` | Отменить все ордера |
-| `symbol <sym>` | `sym` | Сменить символ |
+## Architecture
 
-## Расчёт риска
+```
+shared/     → Типы: Order, Position, Ticker, Symbol, Side
+            → Протокол: ClientPayload, ServerPayload
+            → Расчёт риска: calculate_position_size()
 
-Формула: `qty = risk / (|entry - sl| + entry * fee * 2)`
+server/     → bybit/client.rs — REST API (ордера, позиции, trailing stop)
+            → client_handler.rs — обработка WebSocket сообщений от клиента
+            → server.rs — WebSocket сервер на порту 9000
 
-- taker fee: 0.055%
-- maker fee: 0.02%
-- Комиссия учитывается дважды (вход + выход по SL)
+client/     → app.rs — команды, pipe оператор, история команд
+            → ui.rs — рендеринг ratatui (Orders/Positions/Trade tabs)
+            → connection.rs — WebSocket к серверу
+```
 
-## Правила разработки
+## Key Implementation Details
+
+**Команды клиента** определены в `client/src/app.rs`:
+- `COMMANDS` — массив с именами и алиасами
+- `match_command()` — маппинг алиасов на имена
+- Pipe `|` сохраняет `PendingAction`, выполняется при появлении позиции
+- Цепочка `;` выполняет команды последовательно
+
+**Bybit API** в `server/src/bybit/client.rs`:
+- HMAC-SHA256 подпись для приватных эндпоинтов
+- Hedge mode: `positionIdx` (1=Long, 2=Short)
+- `settleCoin=USDT` обязателен для get_orders
+
+**Trailing Stop**:
+- Устанавливается только на открытую позицию
+- `active_price` — цена активации (trigger)
+- `trailing_stop` — callback distance
+- Направление active_price зависит от side (+ для Long, - для Short)
+
+**Расчёт позиции**: `qty = risk / (|entry - sl| + entry * fee * 2)`
+
+## Code Style
 
 - Не оставлять комментарии в коде
-- Использовать rust_decimal для всех цен и объёмов
-- Сообщения клиент-сервер через shared types
-- Валидация на клиенте перед отправкой
+- `rust_decimal::Decimal` для всех цен и объёмов
+- Округление qty: `round_quantity(qty, 0)` для большинства символов
