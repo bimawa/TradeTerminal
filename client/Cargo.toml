@@ -30,5 +30,5 @@ url = "2.5"
 rodio = { version = "0.19", optional = true }
 
 [features]
-default = []
+default = ["audio"]
 audio = ["rodio"]

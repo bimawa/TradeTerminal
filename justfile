@@ -9,7 +9,7 @@ server:
 
 # Run client
 client:
-    cargo run --bin trade-client
+    BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-apple-darwin -isysroot $(xcrun --show-sdk-path)" cargo run --bin trade-client
 
 # Run all tests
 test:

@@ -1,10 +1,12 @@
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
+use rust_decimal::Decimal;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use trade_shared::{ClientMessage, ServerMessage, ServerPayload};
+use trade_shared::{ClientMessage, ClientPayload, ServerMessage, ServerPayload, Side, Trade};
 
 use crate::bybit::{BybitClient, BybitWebSocket, WsEvent};
 use crate::client_handler::ClientHandler;
@@ -81,6 +83,46 @@ async fn handle_connection(
         }
     });
 
+    let (chart_event_tx, mut chart_event_rx) = mpsc::channel::<WsEvent>(100);
+    let chart_tx = tx.clone();
+    tokio::spawn(async move {
+        while let Some(event) = chart_event_rx.recv().await {
+            let msg = match event {
+                WsEvent::TradeUpdate(data) => {
+                    if let Some(trades) = data.as_array() {
+                        for trade_data in trades {
+                            if let Some(trade) = parse_trade(trade_data) {
+                                let _ = chart_tx.send(ServerMessage::new(ServerPayload::TradeUpdate(trade))).await;
+                            }
+                        }
+                    }
+                    None
+                }
+                WsEvent::KlineUpdate(data) => {
+                    if let Some(candles) = data.as_array() {
+                        if let Some(candle_data) = candles.first() {
+                            if let Some(candle) = parse_candle(candle_data) {
+                                Some(ServerMessage::new(ServerPayload::CandleUpdate(candle)))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            if let Some(msg) = msg {
+                let _ = chart_tx.send(msg).await;
+            }
+        }
+    });
+
+    let mut chart_subscription: Option<tokio::task::JoinHandle<()>> = None;
+
     let write_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if let Ok(text) = serde_json::to_string(&msg) {
@@ -96,8 +138,32 @@ async fn handle_connection(
             Ok(Message::Text(text)) => {
                 match serde_json::from_str::<ClientMessage>(&text) {
                     Ok(client_msg) => {
-                        if let Err(e) = handler.handle(client_msg, &tx).await {
-                            tracing::error!("Handler error: {}", e);
+                        if let ClientPayload::SubscribeChart { ref symbol, ref interval } = client_msg.payload {
+                            if let Some(handle) = chart_subscription.take() {
+                                handle.abort();
+                            }
+                            let ws = bybit_ws.clone();
+                            let sym = symbol.0.clone();
+                            let int = interval.clone();
+                            let evt_tx = chart_event_tx.clone();
+                            chart_subscription = Some(tokio::spawn(async move {
+                                tracing::info!("Starting chart subscription for {} {}", sym, int);
+                                if let Err(e) = ws.connect_chart(&sym, &int, evt_tx).await {
+                                    tracing::error!("Chart WS error: {}", e);
+                                }
+                            }));
+                            let response = ServerMessage::new(ServerPayload::Connected).with_request_id(client_msg.id);
+                            let _ = tx.send(response).await;
+                        } else if let ClientPayload::UnsubscribeChart = client_msg.payload {
+                            if let Some(handle) = chart_subscription.take() {
+                                handle.abort();
+                            }
+                            let response = ServerMessage::new(ServerPayload::Connected).with_request_id(client_msg.id);
+                            let _ = tx.send(response).await;
+                        } else {
+                            if let Err(e) = handler.handle(client_msg, &tx).await {
+                                tracing::error!("Handler error: {}", e);
+                            }
                         }
                     }
                     Err(e) => {
@@ -114,6 +180,43 @@ async fn handle_connection(
         }
     }
 
+    if let Some(handle) = chart_subscription.take() {
+        handle.abort();
+    }
+
     write_task.abort();
     Ok(())
+}
+
+fn parse_trade(data: &serde_json::Value) -> Option<Trade> {
+    let timestamp = data.get("T")?.as_i64()?;
+    let price = Decimal::from_str(data.get("p")?.as_str()?).ok()?;
+    let qty = Decimal::from_str(data.get("v")?.as_str()?).ok()?;
+    let side_str = data.get("S")?.as_str()?;
+    let side = if side_str == "Buy" { Side::Buy } else { Side::Sell };
+    
+    Some(Trade {
+        timestamp,
+        price,
+        qty,
+        side,
+    })
+}
+
+fn parse_candle(data: &serde_json::Value) -> Option<trade_shared::Candle> {
+    let start = data.get("start")?.as_i64()?;
+    let open = Decimal::from_str(data.get("open")?.as_str()?).ok()?;
+    let high = Decimal::from_str(data.get("high")?.as_str()?).ok()?;
+    let low = Decimal::from_str(data.get("low")?.as_str()?).ok()?;
+    let close = Decimal::from_str(data.get("close")?.as_str()?).ok()?;
+    let volume = Decimal::from_str(data.get("volume")?.as_str()?).ok()?;
+    
+    Some(trade_shared::Candle {
+        timestamp: start,
+        open,
+        high,
+        low,
+        close,
+        volume,
+    })
 }

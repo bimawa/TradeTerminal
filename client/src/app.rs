@@ -3,12 +3,15 @@ use crossterm::event::{KeyCode, KeyEvent};
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
 use std::str::FromStr;
+
 use tokio::sync::mpsc;
 use trade_shared::{
     calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, Order,
     OrderRequest, OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol,
     TimeInForce, Trade, TrailingStopRequest,
 };
+
+use crate::audio::AudioPlayer;
 
 struct Cmd {
     name: &'static str,
@@ -121,6 +124,7 @@ pub struct App {
     pub chart_offset: usize,
     pub chart_zoom: u8,
     pub sound_enabled: bool,
+    audio_player: Option<AudioPlayer>,
 }
 
 impl App {
@@ -152,6 +156,7 @@ impl App {
             chart_offset: 0,
             chart_zoom: 2,
             sound_enabled: true,
+            audio_player: AudioPlayer::new(),
         }
     }
 
@@ -372,10 +377,18 @@ impl App {
             }
             Some("symbol") => {
                 if parts.len() >= 2 {
+                    self.unsubscribe_chart().await?;
                     self.symbol = parts[1].to_uppercase();
                     self.last_price = None;
+                    self.candles.clear();
+                    self.trades.clear();
+                    self.chart_offset = 0;
                     self.messages.push(format!("Symbol: {}", self.symbol));
                     self.refresh_ticker().await?;
+                    if self.tab == Tab::Chart {
+                        self.refresh_candles().await?;
+                        self.subscribe_chart().await?;
+                    }
                 }
             }
             Some("positions") => {
@@ -417,6 +430,7 @@ impl App {
                     self.messages.push("Requesting candles...".to_string());
                     self.refresh_candles().await?;
                 }
+                self.subscribe_chart().await?;
             }
             Some("tf") => {
                 if parts.len() >= 2 {
@@ -425,6 +439,7 @@ impl App {
                         self.chart_interval = interval.to_string();
                         self.chart_offset = 0;
                         self.refresh_candles().await?;
+                        self.subscribe_chart().await?;
                         self.messages.push(format!("Timeframe: {}", interval));
                     } else {
                         self.messages.push("Valid: 1, 3, 5, 15, 30, 60, 120, 240, D, W".to_string());
@@ -757,6 +772,21 @@ impl App {
         Ok(())
     }
 
+    async fn subscribe_chart(&mut self) -> Result<()> {
+        let msg = ClientMessage::new(ClientPayload::SubscribeChart {
+            symbol: Symbol::new(&self.symbol),
+            interval: self.chart_interval.clone(),
+        });
+        self.conn_tx.send(msg).await?;
+        Ok(())
+    }
+
+    async fn unsubscribe_chart(&mut self) -> Result<()> {
+        let msg = ClientMessage::new(ClientPayload::UnsubscribeChart);
+        self.conn_tx.send(msg).await?;
+        Ok(())
+    }
+
     fn show_help(&mut self) {
         self.messages.push("Commands:".to_string());
         self.messages.push("  buy <qty> [price]              - Place buy order".to_string());
@@ -897,9 +927,16 @@ impl App {
                     }
                 }
                 ServerPayload::TradeUpdate(trade) => {
+                    let is_buy = trade.side == Side::Buy;
                     self.trades.push_front(trade);
                     if self.trades.len() > 100 {
                         self.trades.pop_back();
+                    }
+                    
+                    if self.sound_enabled && self.tab == Tab::Chart {
+                        if let Some(ref player) = self.audio_player {
+                            player.tick(is_buy);
+                        }
                     }
                 }
                 ServerPayload::Pong => {}
