@@ -104,6 +104,8 @@ pub struct App {
     server_rx: mpsc::Receiver<ServerMessage>,
     pending_risk_order: Option<PendingRiskOrder>,
     pending_action: Option<PendingAction>,
+    command_history: Vec<String>,
+    history_index: Option<usize>,
 }
 
 impl App {
@@ -125,6 +127,8 @@ impl App {
             server_rx,
             pending_risk_order: None,
             pending_action: None,
+            command_history: Vec::new(),
+            history_index: None,
         }
     }
 
@@ -155,12 +159,39 @@ impl App {
                 KeyCode::Esc => {
                     self.input_mode = InputMode::Normal;
                     self.input.clear();
+                    self.history_index = None;
                 }
                 KeyCode::Enter => {
                     let cmd = self.input.clone();
                     self.input.clear();
                     self.input_mode = InputMode::Normal;
+                    self.history_index = None;
+                    if !cmd.is_empty() {
+                        self.command_history.push(cmd.clone());
+                    }
                     self.execute_command(&cmd).await?;
+                }
+                KeyCode::Up => {
+                    if !self.command_history.is_empty() {
+                        let new_index = match self.history_index {
+                            None => self.command_history.len() - 1,
+                            Some(0) => 0,
+                            Some(i) => i - 1,
+                        };
+                        self.history_index = Some(new_index);
+                        self.input = self.command_history[new_index].clone();
+                    }
+                }
+                KeyCode::Down => {
+                    if let Some(i) = self.history_index {
+                        if i + 1 < self.command_history.len() {
+                            self.history_index = Some(i + 1);
+                            self.input = self.command_history[i + 1].clone();
+                        } else {
+                            self.history_index = None;
+                            self.input.clear();
+                        }
+                    }
                 }
                 KeyCode::Tab => {
                     self.autocomplete();
@@ -191,17 +222,50 @@ impl App {
         if cmd.contains('|') {
             let parts: Vec<&str> = cmd.split('|').map(|s| s.trim()).collect();
             if parts.len() >= 2 {
+                let first_cmd = parts[0];
+                let first_parts: Vec<&str> = first_cmd.split_whitespace().collect();
+                let side = if !first_parts.is_empty() {
+                    match match_command(first_parts[0]) {
+                        Some("buyrisk") | Some("buy") => Side::Buy,
+                        Some("sellrisk") | Some("sell") => Side::Sell,
+                        _ => Side::Buy,
+                    }
+                } else {
+                    Side::Buy
+                };
                 self.pending_action = Some(PendingAction {
                     symbol: self.symbol.clone(),
-                    side: Side::Buy,
+                    side,
                     action: parts[1..].join("|"),
                 });
-                self.execute_single_command(parts[0]).await?;
+                self.execute_single_command(first_cmd).await?;
                 return Ok(());
             }
         }
 
         self.execute_single_command(cmd).await
+    }
+
+    async fn execute_pending_action(&mut self, pending: &PendingAction) -> Result<()> {
+        let parts: Vec<&str> = pending.action.split_whitespace().collect();
+        if parts.is_empty() {
+            return Ok(());
+        }
+
+        match match_command(parts[0]) {
+            Some("ts") => {
+                if parts.len() >= 3 {
+                    self.set_trailing_stop(&parts[1..], Some(pending.side)).await?;
+                } else {
+                    self.messages.push("Usage: ts <trigger> <callback>".to_string());
+                }
+            }
+            _ => {
+                self.execute_single_command(&pending.action).await?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn execute_single_command(&mut self, cmd: &str) -> Result<()> {
@@ -266,7 +330,7 @@ impl App {
             }
             Some("ts") => {
                 if parts.len() >= 3 {
-                    self.set_trailing_stop(&parts[1..]).await?;
+                    self.set_trailing_stop(&parts[1..], None).await?;
                 } else {
                     self.messages.push("Usage: ts <trigger> <callback> (use % for percent)".to_string());
                 }
@@ -448,7 +512,7 @@ impl App {
         Ok(())
     }
 
-    async fn set_trailing_stop(&mut self, args: &[&str]) -> Result<()> {
+    async fn set_trailing_stop(&mut self, args: &[&str], side: Option<Side>) -> Result<()> {
         let trigger = match parse_value(args[0]) {
             Some(v) => v,
             None => {
@@ -473,8 +537,25 @@ impl App {
             }
         };
 
+        let position_side = match side {
+            Some(s) => s,
+            None => {
+                let pos = self.positions.iter().find(|p| p.symbol.0 == self.symbol);
+                match pos {
+                    Some(p) => p.side,
+                    None => {
+                        self.messages.push("No position found for TS".to_string());
+                        return Ok(());
+                    }
+                }
+            }
+        };
+
         let active_price = match trigger {
-            Value::Percent(pct) => entry_price * (Decimal::ONE + pct / Decimal::from(100)),
+            Value::Percent(pct) => match position_side {
+                Side::Buy => entry_price * (Decimal::ONE + pct / Decimal::from(100)),
+                Side::Sell => entry_price * (Decimal::ONE - pct / Decimal::from(100)),
+            },
             Value::Absolute(price) => price,
         };
 
@@ -485,6 +566,7 @@ impl App {
 
         let req = TrailingStopRequest {
             symbol: Symbol::new(&self.symbol),
+            side: position_side,
             trailing_stop,
             active_price: Some(active_price),
         };
@@ -493,7 +575,8 @@ impl App {
         self.conn_tx.send(msg).await?;
 
         self.messages.push(format!(
-            "Setting TS: trigger@{:.2}, callback {:.2}",
+            "Setting TS: {} trigger@{:.2}, callback {:.2}",
+            if position_side == Side::Buy { "LONG" } else { "SHORT" },
             active_price, trailing_stop
         ));
 
@@ -619,7 +702,7 @@ impl App {
                         if let Some(pending) = self.pending_action.take() {
                             if pending.symbol == self.symbol {
                                 self.messages.push(format!("Position opened, executing: {}", pending.action));
-                                if let Err(e) = self.execute_single_command(&pending.action).await {
+                                if let Err(e) = self.execute_pending_action(&pending).await {
                                     self.messages.push(format!("Pending action error: {}", e));
                                 }
                             }

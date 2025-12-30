@@ -330,6 +330,7 @@ impl BybitClient {
     pub async fn set_trailing_stop(
         &self,
         symbol: &Symbol,
+        side: Side,
         trailing_stop: Decimal,
         active_price: Option<Decimal>,
     ) -> Result<()> {
@@ -337,15 +338,23 @@ impl BybitClient {
         struct TradingStopRequest {
             category: String,
             symbol: String,
+            #[serde(rename = "positionIdx")]
+            position_idx: u8,
             #[serde(rename = "trailingStop")]
             trailing_stop: String,
             #[serde(rename = "activePrice", skip_serializing_if = "Option::is_none")]
             active_price: Option<String>,
         }
 
+        let position_idx = match side {
+            Side::Buy => 1,
+            Side::Sell => 2,
+        };
+
         let body = TradingStopRequest {
             category: "linear".to_string(),
             symbol: symbol.0.clone(),
+            position_idx,
             trailing_stop: trailing_stop.to_string(),
             active_price: active_price.map(|p| p.to_string()),
         };

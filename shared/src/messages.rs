@@ -28,6 +28,7 @@ pub enum ClientPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrailingStopRequest {
     pub symbol: Symbol,
+    pub side: crate::Side,
     pub trailing_stop: rust_decimal::Decimal,
     pub active_price: Option<rust_decimal::Decimal>,
 }

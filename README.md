@@ -6,9 +6,15 @@
 
 - Размещение market/limit ордеров
 - Расчёт размера позиции от риска в USDT
+- Take Profit в процентах
+- Trailing Stop с гибкой настройкой
+- Pipe оператор для комбо-команд (`:br 10 94000 | ts 2% 0.5%`)
+- Цепочка команд через `;`
+- Поддержка Hedge Mode (Long/Short позиции одновременно)
 - Просмотр открытых ордеров и позиций
 - Отмена ордеров
 - Работа с несколькими символами
+- Автообновление данных
 
 ## Требования
 
@@ -78,10 +84,30 @@ cargo run --bin trade-client
 
 **Ордера с расчётом риска:**
 ```
-:buyrisk 10 94000           # Long market, риск $10, SL @ 94000
-:buyrisk 10 94000 95000     # Long limit @ 95000
-:sellrisk 10 96000          # Short market, риск $10, SL @ 96000
-:sellrisk 10 96000 95000    # Short limit @ 95000
+:buyrisk 10 94000             # Long market, риск $10, SL @ 94000
+:buyrisk 10 94000 95000       # Long limit @ 95000
+:buyrisk 10 94000 - 2         # Long market + TP 2%
+:sellrisk 10 96000            # Short market, риск $10, SL @ 96000
+:sellrisk 10 96000 95000      # Short limit @ 95000
+:sellrisk 10 96000 95000 1.5  # Short limit + TP 1.5%
+```
+
+**Trailing Stop:**
+```
+:ts 2% 0.5%            # Активация +2%, callback 0.5%
+:ts 97000 0.5%         # Активация @ 97000, callback 0.5%
+:ts 2% 500             # Активация +2%, callback $500
+```
+
+**Комбо команды (pipe):**
+```
+:br 10 94000 | ts 2% 0.5%     # Long + trailing stop после входа
+:sr 10 96000 | ts 2% 0.5%     # Short + trailing stop после входа
+```
+
+**Цепочка команд:**
+```
+:ca; br 10 94000       # Отменить все + новый ордер
 ```
 
 **Управление:**
@@ -100,6 +126,7 @@ cargo run --bin trade-client
 - `:c` = `:cancel`
 - `:ca` = `:cancelall`
 - `:sym` = `:symbol`
+- `:h` = `:help`
 
 ## Расчёт размера позиции
 

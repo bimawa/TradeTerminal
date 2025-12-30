@@ -46,7 +46,7 @@ impl ClientHandler {
             }
 
             ClientPayload::SetTrailingStop(req) => {
-                match self.bybit.set_trailing_stop(&req.symbol, req.trailing_stop, req.active_price).await {
+                match self.bybit.set_trailing_stop(&req.symbol, req.side, req.trailing_stop, req.active_price).await {
                     Ok(_) => ServerMessage::new(ServerPayload::TrailingStopSet {
                         symbol: req.symbol,
                     }),
