@@ -51,8 +51,13 @@ impl Connection {
                 Some(msg) = read.next() => {
                     match msg {
                         Ok(Message::Text(text)) => {
-                            if let Ok(server_msg) = serde_json::from_str::<ServerMessage>(&text) {
-                                let _ = self.rx_to_ui.send(server_msg).await;
+                            match serde_json::from_str::<ServerMessage>(&text) {
+                                Ok(server_msg) => {
+                                    let _ = self.rx_to_ui.send(server_msg).await;
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to parse server message: {} - {}", e, &text[..text.len().min(200)]);
+                                }
                             }
                         }
                         Ok(Message::Close(_)) => break,

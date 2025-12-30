@@ -15,6 +15,8 @@ pub enum WsEvent {
     PositionUpdate(serde_json::Value),
     ExecutionUpdate(serde_json::Value),
     TickerUpdate(serde_json::Value),
+    KlineUpdate(serde_json::Value),
+    TradeUpdate(serde_json::Value),
     Connected,
     Disconnected,
 }
@@ -171,6 +173,74 @@ impl BybitWebSocket {
                 }
                 Ok(Message::Close(_)) => break,
                 Err(_) => break,
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn connect_chart(
+        &self,
+        symbol: &str,
+        interval: &str,
+        tx: mpsc::Sender<WsEvent>,
+    ) -> Result<()> {
+        let (ws_stream, _) = connect_async(&self.public_url).await?;
+        let (mut write, mut read) = ws_stream.split();
+
+        let topics = vec![
+            format!("kline.{}.{}", interval, symbol),
+            format!("publicTrade.{}", symbol),
+        ];
+
+        let sub = SubscribeMessage {
+            op: "subscribe".to_string(),
+            args: topics,
+        };
+        write
+            .send(Message::Text(serde_json::to_string(&sub)?))
+            .await?;
+
+        let _ = tx.send(WsEvent::Connected).await;
+
+        tokio::spawn(async move {
+            let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(20));
+            loop {
+                ping_interval.tick().await;
+                if write
+                    .send(Message::Text(r#"{"op":"ping"}"#.to_string()))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+
+        while let Some(msg) = read.next().await {
+            match msg {
+                Ok(Message::Text(text)) => {
+                    if let Ok(ws_msg) = serde_json::from_str::<WsMessage>(&text) {
+                        if let Some(topic) = &ws_msg.topic {
+                            if let Some(data) = ws_msg.data {
+                                if topic.starts_with("kline.") {
+                                    let _ = tx.send(WsEvent::KlineUpdate(data)).await;
+                                } else if topic.starts_with("publicTrade.") {
+                                    let _ = tx.send(WsEvent::TradeUpdate(data)).await;
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Message::Close(_)) => {
+                    let _ = tx.send(WsEvent::Disconnected).await;
+                    break;
+                }
+                Err(_) => {
+                    let _ = tx.send(WsEvent::Disconnected).await;
+                    break;
+                }
                 _ => {}
             }
         }

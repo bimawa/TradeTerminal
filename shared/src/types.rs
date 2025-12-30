@@ -109,6 +109,24 @@ pub struct AccountInfo {
     pub positions: Vec<Position>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Candle {
+    pub timestamp: i64,
+    pub open: Decimal,
+    pub high: Decimal,
+    pub low: Decimal,
+    pub close: Decimal,
+    pub volume: Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Trade {
+    pub timestamp: i64,
+    pub price: Decimal,
+    pub qty: Decimal,
+    pub side: Side,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

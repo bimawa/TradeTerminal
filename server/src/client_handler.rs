@@ -93,6 +93,31 @@ impl ClientHandler {
                 }
             }
 
+            ClientPayload::GetCandles { symbol, interval, limit } => {
+                tracing::info!("GetCandles request: {} {} {}", symbol.0, interval, limit);
+                match self.bybit.get_klines(&symbol, &interval, limit).await {
+                    Ok(candles) => {
+                        tracing::info!("GetCandles success: {} candles", candles.len());
+                        ServerMessage::new(ServerPayload::Candles(candles))
+                    }
+                    Err(e) => {
+                        tracing::error!("GetCandles error: {}", e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: e.to_string(),
+                        })
+                    }
+                }
+            }
+
+            ClientPayload::SubscribeChart { symbol: _, interval: _ } => {
+                ServerMessage::new(ServerPayload::Connected)
+            }
+
+            ClientPayload::UnsubscribeChart => {
+                ServerMessage::new(ServerPayload::Connected)
+            }
+
             ClientPayload::Subscribe { symbols: _ } => {
                 ServerMessage::new(ServerPayload::Connected)
             }

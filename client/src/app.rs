@@ -1,12 +1,13 @@
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use rust_decimal::Decimal;
+use std::collections::VecDeque;
 use std::str::FromStr;
 use tokio::sync::mpsc;
 use trade_shared::{
-    calculate_position_size, round_quantity, ClientMessage, ClientPayload, Order, OrderRequest,
-    OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol, TimeInForce,
-    TrailingStopRequest,
+    calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, Order,
+    OrderRequest, OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol,
+    TimeInForce, Trade, TrailingStopRequest,
 };
 
 struct Cmd {
@@ -26,6 +27,11 @@ const COMMANDS: &[Cmd] = &[
     Cmd { name: "orders", aliases: &["ord"] },
     Cmd { name: "ts", aliases: &[] },
     Cmd { name: "help", aliases: &["h"] },
+    Cmd { name: "chart", aliases: &["ch"] },
+    Cmd { name: "tf", aliases: &[] },
+    Cmd { name: "level", aliases: &["lv"] },
+    Cmd { name: "clevel", aliases: &["clv"] },
+    Cmd { name: "mute", aliases: &[] },
 ];
 
 fn match_command(input: &str) -> Option<&'static str> {
@@ -88,11 +94,13 @@ pub enum Tab {
     Orders,
     Positions,
     Trade,
+    Chart,
 }
 
 pub struct App {
     pub input_mode: InputMode,
     pub input: String,
+    pub input_cursor: usize,
     pub tab: Tab,
     pub orders: Vec<Order>,
     pub positions: Vec<Position>,
@@ -106,6 +114,13 @@ pub struct App {
     pending_action: Option<PendingAction>,
     command_history: Vec<String>,
     history_index: Option<usize>,
+    pub candles: Vec<Candle>,
+    pub trades: VecDeque<Trade>,
+    pub chart_interval: String,
+    pub chart_levels: Vec<Decimal>,
+    pub chart_offset: usize,
+    pub chart_zoom: u8,
+    pub sound_enabled: bool,
 }
 
 impl App {
@@ -116,6 +131,7 @@ impl App {
         Self {
             input_mode: InputMode::Normal,
             input: String::new(),
+            input_cursor: 0,
             tab: Tab::Trade,
             orders: Vec::new(),
             positions: Vec::new(),
@@ -129,6 +145,13 @@ impl App {
             pending_action: None,
             command_history: Vec::new(),
             history_index: None,
+            candles: Vec::new(),
+            trades: VecDeque::with_capacity(100),
+            chart_interval: "5".to_string(),
+            chart_levels: Vec::new(),
+            chart_offset: 0,
+            chart_zoom: 2,
+            sound_enabled: true,
         }
     }
 
@@ -147,11 +170,33 @@ impl App {
                     self.tab = match self.tab {
                         Tab::Orders => Tab::Positions,
                         Tab::Positions => Tab::Trade,
-                        Tab::Trade => Tab::Orders,
+                        Tab::Trade => Tab::Chart,
+                        Tab::Chart => Tab::Orders,
                     };
+                    if self.tab == Tab::Chart && self.candles.is_empty() {
+                        self.refresh_candles().await?;
+                    }
                 }
                 KeyCode::Char('r') => {
                     self.refresh().await?;
+                }
+                KeyCode::Left if self.tab == Tab::Chart => {
+                    if self.chart_offset + 10 < self.candles.len() {
+                        self.chart_offset += 10;
+                    }
+                }
+                KeyCode::Right if self.tab == Tab::Chart => {
+                    self.chart_offset = self.chart_offset.saturating_sub(10);
+                }
+                KeyCode::Char('+') | KeyCode::Char('=') if self.tab == Tab::Chart => {
+                    if self.chart_zoom < 5 {
+                        self.chart_zoom += 1;
+                    }
+                }
+                KeyCode::Char('-') if self.tab == Tab::Chart => {
+                    if self.chart_zoom > 1 {
+                        self.chart_zoom -= 1;
+                    }
                 }
                 _ => {}
             },
@@ -159,17 +204,29 @@ impl App {
                 KeyCode::Esc => {
                     self.input_mode = InputMode::Normal;
                     self.input.clear();
+                    self.input_cursor = 0;
                     self.history_index = None;
                 }
                 KeyCode::Enter => {
                     let cmd = self.input.clone();
                     self.input.clear();
+                    self.input_cursor = 0;
                     self.input_mode = InputMode::Normal;
                     self.history_index = None;
                     if !cmd.is_empty() {
                         self.command_history.push(cmd.clone());
                     }
                     self.execute_command(&cmd).await?;
+                }
+                KeyCode::Left => {
+                    if self.input_cursor > 0 {
+                        self.input_cursor -= 1;
+                    }
+                }
+                KeyCode::Right => {
+                    if self.input_cursor < self.input.len() {
+                        self.input_cursor += 1;
+                    }
                 }
                 KeyCode::Up => {
                     if !self.command_history.is_empty() {
@@ -180,6 +237,7 @@ impl App {
                         };
                         self.history_index = Some(new_index);
                         self.input = self.command_history[new_index].clone();
+                        self.input_cursor = self.input.len();
                     }
                 }
                 KeyCode::Down => {
@@ -187,9 +245,11 @@ impl App {
                         if i + 1 < self.command_history.len() {
                             self.history_index = Some(i + 1);
                             self.input = self.command_history[i + 1].clone();
+                            self.input_cursor = self.input.len();
                         } else {
                             self.history_index = None;
                             self.input.clear();
+                            self.input_cursor = 0;
                         }
                     }
                 }
@@ -197,10 +257,25 @@ impl App {
                     self.autocomplete();
                 }
                 KeyCode::Char(c) => {
-                    self.input.push(c);
+                    self.input.insert(self.input_cursor, c);
+                    self.input_cursor += 1;
                 }
                 KeyCode::Backspace => {
-                    self.input.pop();
+                    if self.input_cursor > 0 {
+                        self.input_cursor -= 1;
+                        self.input.remove(self.input_cursor);
+                    }
+                }
+                KeyCode::Delete => {
+                    if self.input_cursor < self.input.len() {
+                        self.input.remove(self.input_cursor);
+                    }
+                }
+                KeyCode::Home => {
+                    self.input_cursor = 0;
+                }
+                KeyCode::End => {
+                    self.input_cursor = self.input.len();
                 }
                 _ => {}
             },
@@ -334,6 +409,56 @@ impl App {
                 } else {
                     self.messages.push("Usage: ts <trigger> <callback> (use % for percent)".to_string());
                 }
+            }
+            Some("chart") => {
+                self.tab = Tab::Chart;
+                self.messages.push(format!("Chart: {} candles loaded", self.candles.len()));
+                if self.candles.is_empty() {
+                    self.messages.push("Requesting candles...".to_string());
+                    self.refresh_candles().await?;
+                }
+            }
+            Some("tf") => {
+                if parts.len() >= 2 {
+                    let interval = parts[1];
+                    if ["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"].contains(&interval) {
+                        self.chart_interval = interval.to_string();
+                        self.chart_offset = 0;
+                        self.refresh_candles().await?;
+                        self.messages.push(format!("Timeframe: {}", interval));
+                    } else {
+                        self.messages.push("Valid: 1, 3, 5, 15, 30, 60, 120, 240, D, W".to_string());
+                    }
+                } else {
+                    self.messages.push(format!("Current tf: {}. Usage: tf <1|5|15|30|60|240>", self.chart_interval));
+                }
+            }
+            Some("level") => {
+                if parts.len() >= 2 {
+                    if let Ok(price) = Decimal::from_str(parts[1]) {
+                        self.chart_levels.push(price);
+                        self.messages.push(format!("Level added: {}", price));
+                    } else {
+                        self.messages.push("Invalid price".to_string());
+                    }
+                } else {
+                    self.messages.push(format!("Levels: {:?}", self.chart_levels));
+                }
+            }
+            Some("clevel") => {
+                if parts.len() >= 2 {
+                    if let Ok(price) = Decimal::from_str(parts[1]) {
+                        self.chart_levels.retain(|&l| l != price);
+                        self.messages.push(format!("Level removed: {}", price));
+                    }
+                } else {
+                    self.chart_levels.clear();
+                    self.messages.push("All levels cleared".to_string());
+                }
+            }
+            Some("mute") => {
+                self.sound_enabled = !self.sound_enabled;
+                self.messages.push(format!("Sound: {}", if self.sound_enabled { "ON" } else { "OFF" }));
             }
             _ => {
                 self.messages.push(format!("Unknown command: {}", parts[0]));
@@ -587,6 +712,9 @@ impl App {
         self.refresh_orders().await?;
         self.refresh_positions().await?;
         self.refresh_ticker().await?;
+        if self.tab == Tab::Chart {
+            self.refresh_candles().await?;
+        }
         Ok(())
     }
 
@@ -619,6 +747,16 @@ impl App {
         Ok(())
     }
 
+    async fn refresh_candles(&mut self) -> Result<()> {
+        let msg = ClientMessage::new(ClientPayload::GetCandles {
+            symbol: Symbol::new(&self.symbol),
+            interval: self.chart_interval.clone(),
+            limit: 200,
+        });
+        self.conn_tx.send(msg).await?;
+        Ok(())
+    }
+
     fn show_help(&mut self) {
         self.messages.push("Commands:".to_string());
         self.messages.push("  buy <qty> [price]              - Place buy order".to_string());
@@ -646,10 +784,12 @@ impl App {
 
         if matches.len() == 1 {
             self.input = format!("{} ", matches[0]);
+            self.input_cursor = self.input.len();
         } else if matches.len() > 1 {
             let common = Self::common_prefix(&matches);
             if common.len() > input.len() {
                 self.input = common;
+                self.input_cursor = self.input.len();
             }
         }
     }
@@ -737,6 +877,29 @@ impl App {
                         } else {
                             self.pending_risk_order = Some(pending);
                         }
+                    }
+                }
+                ServerPayload::Candles(candles) => {
+                    self.messages.push(format!("Received {} candles", candles.len()));
+                    self.candles = candles;
+                    self.chart_offset = 0;
+                }
+                ServerPayload::CandleUpdate(candle) => {
+                    if let Some(last) = self.candles.last_mut() {
+                        if last.timestamp == candle.timestamp {
+                            *last = candle;
+                        } else {
+                            self.candles.push(candle);
+                            if self.candles.len() > 500 {
+                                self.candles.remove(0);
+                            }
+                        }
+                    }
+                }
+                ServerPayload::TradeUpdate(trade) => {
+                    self.trades.push_front(trade);
+                    if self.trades.len() > 100 {
+                        self.trades.pop_back();
                     }
                 }
                 ServerPayload::Pong => {}

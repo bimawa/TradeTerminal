@@ -3,7 +3,7 @@ use reqwest::Client;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use trade_shared::{Order, OrderRequest, OrderStatus, OrderType, Position, Side, Symbol, Ticker};
+use trade_shared::{Candle, Order, OrderRequest, OrderStatus, OrderType, Position, Side, Symbol, Ticker};
 
 use super::sign::generate_signature;
 use crate::config::Config;
@@ -104,6 +104,12 @@ struct BybitTicker {
     volume_24h: String,
     #[serde(rename = "price24hPcnt")]
     price_change_24h: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct KlineListResult {
+    #[serde(default)]
+    list: Vec<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -327,6 +333,23 @@ impl BybitClient {
             .context("Ticker not found")
     }
 
+    pub async fn get_klines(&self, symbol: &Symbol, interval: &str, limit: u32) -> Result<Vec<Candle>> {
+        let params = format!(
+            "category=linear&symbol={}&interval={}&limit={}",
+            symbol.0, interval, limit
+        );
+        let result: KlineListResult = self.get_public("/v5/market/kline", &params).await?;
+
+        let mut candles: Vec<Candle> = result
+            .list
+            .into_iter()
+            .filter_map(|row| convert_kline(&row))
+            .collect();
+
+        candles.reverse();
+        Ok(candles)
+    }
+
     pub async fn set_trailing_stop(
         &self,
         symbol: &Symbol,
@@ -429,4 +452,18 @@ fn convert_ticker(t: BybitTicker, symbol: &Symbol) -> Ticker {
         volume_24h: t.volume_24h.parse().unwrap_or_default(),
         price_change_24h: t.price_change_24h.parse().unwrap_or_default(),
     }
+}
+
+fn convert_kline(row: &[String]) -> Option<Candle> {
+    if row.len() < 6 {
+        return None;
+    }
+    Some(Candle {
+        timestamp: row[0].parse().ok()?,
+        open: row[1].parse().ok()?,
+        high: row[2].parse().ok()?,
+        low: row[3].parse().ok()?,
+        close: row[4].parse().ok()?,
+        volume: row[5].parse().ok()?,
+    })
 }

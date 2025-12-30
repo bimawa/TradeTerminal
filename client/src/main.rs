@@ -1,4 +1,5 @@
 mod app;
+mod audio;
 mod connection;
 mod ui;
 
@@ -36,6 +37,7 @@ async fn main() -> Result<()> {
     });
 
     let app = App::new(conn_tx, rx);
+    terminal.clear()?;
     let result = run_app(&mut terminal, app).await;
 
     disable_raw_mode()?;
