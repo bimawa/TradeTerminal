@@ -124,6 +124,8 @@ struct PlaceOrderRequest {
     price: Option<String>,
     #[serde(rename = "timeInForce")]
     time_in_force: String,
+    #[serde(rename = "positionIdx")]
+    position_idx: u8,
     #[serde(rename = "reduceOnly")]
     reduce_only: bool,
     #[serde(rename = "takeProfit", skip_serializing_if = "Option::is_none")]
@@ -236,6 +238,10 @@ impl BybitClient {
                 trade_shared::TimeInForce::Ioc => "IOC".to_string(),
                 trade_shared::TimeInForce::Fok => "FOK".to_string(),
                 trade_shared::TimeInForce::PostOnly => "PostOnly".to_string(),
+            },
+            position_idx: match req.side {
+                Side::Buy => 1,
+                Side::Sell => 2,
             },
             reduce_only: req.reduce_only,
             take_profit: req.take_profit.map(|p| p.to_string()),

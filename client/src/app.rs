@@ -796,6 +796,12 @@ impl App {
         self.messages.push("  cancel <id>                    - Cancel order".to_string());
         self.messages.push("  cancelall                      - Cancel all orders".to_string());
         self.messages.push("  symbol <sym>                   - Set symbol".to_string());
+        self.messages.push("  chart                          - Open chart view".to_string());
+        self.messages.push("  tf <1|5|15|30|60|240|D|W>      - Set timeframe".to_string());
+        self.messages.push("  level <price>                  - Add price level".to_string());
+        self.messages.push("  levels                         - Clear all levels".to_string());
+        self.messages.push("  sound                          - Toggle trade sounds".to_string());
+        self.messages.push("Chart keys: h/l=scroll, +/-=zoom, 0=reset".to_string());
         self.messages.push("Keys: Tab=autocomplete, r=refresh, :=command, q=quit".to_string());
     }
 
