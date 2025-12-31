@@ -573,17 +573,35 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_messages(f: &mut Frame, app: &App, area: Rect) {
+    let visible_count = (area.height as usize).saturating_sub(2).min(8);
+    let start = app.messages.len().saturating_sub(visible_count);
+    
     let messages: Vec<ListItem> = app
         .messages
         .iter()
-        .rev()
-        .take(8)
-        .rev()
-        .map(|m| ListItem::new(Line::from(m.as_str())))
+        .skip(start)
+        .enumerate()
+        .map(|(i, m)| {
+            let actual_idx = start + i;
+            let reverse_idx = app.messages.len().saturating_sub(1 + actual_idx);
+            
+            if app.input_mode == InputMode::Copy && reverse_idx == app.copy_index {
+                ListItem::new(Line::from(m.as_str()))
+                    .style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+            } else {
+                ListItem::new(Line::from(m.as_str()))
+            }
+        })
         .collect();
 
+    let title = if app.input_mode == InputMode::Copy {
+        " Messages [COPY: j/k=nav, Enter=copy, Esc=exit] "
+    } else {
+        " Messages (y=copy mode) "
+    };
+
     let list = List::new(messages)
-        .block(Block::default().borders(Borders::ALL).title(" Messages "));
+        .block(Block::default().borders(Borders::ALL).title(title));
 
     f.render_widget(list, area);
 }
@@ -592,6 +610,7 @@ fn draw_input(f: &mut Frame, app: &App, area: Rect) {
     let (title, style) = match app.input_mode {
         InputMode::Normal => (" Press ':' for commands ", Style::default()),
         InputMode::Command => (" Command ", Style::default().fg(Color::Yellow)),
+        InputMode::Copy => (" Copy Mode ", Style::default().fg(Color::Cyan)),
     };
 
     let input = Paragraph::new(format!(":{}", app.input))

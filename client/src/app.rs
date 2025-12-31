@@ -94,6 +94,7 @@ fn parse_value(s: &str) -> Option<Value> {
 pub enum InputMode {
     Normal,
     Command,
+    Copy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,6 +132,8 @@ pub struct App {
     pub chart_offset_v: i32,
     pub sound_enabled: bool,
     audio_player: Option<AudioPlayer>,
+    pub copy_index: usize,
+    clipboard: Option<arboard::Clipboard>,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -168,6 +171,8 @@ impl App {
             chart_offset_v: 0,
             sound_enabled: true,
             audio_player: AudioPlayer::new(),
+            copy_index: 0,
+            clipboard: arboard::Clipboard::new().ok(),
         }
     }
 
@@ -211,6 +216,12 @@ impl App {
                 KeyCode::Char(':') => {
                     self.input_mode = InputMode::Command;
                     self.input.clear();
+                }
+                KeyCode::Char('y') => {
+                    if !self.messages.is_empty() {
+                        self.input_mode = InputMode::Copy;
+                        self.copy_index = 0;
+                    }
                 }
                 KeyCode::Tab => {
                     self.tab = match self.tab {
@@ -356,6 +367,32 @@ impl App {
                 }
                 KeyCode::End => {
                     self.input_cursor = self.input.len();
+                }
+                _ => {}
+            },
+            InputMode::Copy => match key.code {
+                KeyCode::Esc | KeyCode::Char('y') => {
+                    self.input_mode = InputMode::Normal;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if self.copy_index + 1 < self.messages.len() {
+                        self.copy_index += 1;
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if self.copy_index > 0 {
+                        self.copy_index -= 1;
+                    }
+                }
+                KeyCode::Enter => {
+                    let msg_idx = self.messages.len().saturating_sub(1 + self.copy_index);
+                    if let Some(msg) = self.messages.get(msg_idx) {
+                        if let Some(ref mut cb) = self.clipboard {
+                            if cb.set_text(msg.clone()).is_ok() {
+                                self.input_mode = InputMode::Normal;
+                            }
+                        }
+                    }
                 }
                 _ => {}
             },
@@ -1056,6 +1093,7 @@ impl App {
                     }
                 }
                 ServerPayload::Pong => {}
+                ServerPayload::ChartSubscribed => {}
                 ServerPayload::AccountInfo(_) => {}
             }
         }

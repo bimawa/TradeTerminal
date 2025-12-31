@@ -59,6 +59,7 @@ pub enum ServerPayload {
     CandleUpdate(Candle),
     TradeUpdate(Trade),
     Connected,
+    ChartSubscribed,
     Pong,
     Error { code: u32, message: String },
 }

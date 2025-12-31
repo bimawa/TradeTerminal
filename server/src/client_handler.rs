@@ -111,19 +111,19 @@ impl ClientHandler {
             }
 
             ClientPayload::SubscribeChart { symbol: _, interval: _ } => {
-                ServerMessage::new(ServerPayload::Connected)
+                ServerMessage::new(ServerPayload::ChartSubscribed)
             }
 
             ClientPayload::UnsubscribeChart => {
-                ServerMessage::new(ServerPayload::Connected)
+                ServerMessage::new(ServerPayload::ChartSubscribed)
             }
 
             ClientPayload::Subscribe { symbols: _ } => {
-                ServerMessage::new(ServerPayload::Connected)
+                ServerMessage::new(ServerPayload::ChartSubscribed)
             }
 
             ClientPayload::Unsubscribe { symbols: _ } => {
-                ServerMessage::new(ServerPayload::Connected)
+                ServerMessage::new(ServerPayload::ChartSubscribed)
             }
 
             ClientPayload::Ping => ServerMessage::new(ServerPayload::Pong),

@@ -152,13 +152,13 @@ async fn handle_connection(
                                     tracing::error!("Chart WS error: {}", e);
                                 }
                             }));
-                            let response = ServerMessage::new(ServerPayload::Connected).with_request_id(client_msg.id);
+                            let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
                             let _ = tx.send(response).await;
                         } else if let ClientPayload::UnsubscribeChart = client_msg.payload {
                             if let Some(handle) = chart_subscription.take() {
                                 handle.abort();
                             }
-                            let response = ServerMessage::new(ServerPayload::Connected).with_request_id(client_msg.id);
+                            let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
                             let _ = tx.send(response).await;
                         } else {
                             if let Err(e) = handler.handle(client_msg, &tx).await {

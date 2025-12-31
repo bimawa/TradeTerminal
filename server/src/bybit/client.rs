@@ -20,10 +20,6 @@ pub struct BybitClient {
 
 #[derive(Debug, Deserialize)]
 struct BybitResponse<T> {
-    #[serde(rename = "retCode")]
-    ret_code: i32,
-    #[serde(rename = "retMsg")]
-    ret_msg: String,
     #[serde(default)]
     result: Option<T>,
 }
