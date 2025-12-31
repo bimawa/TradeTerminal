@@ -515,15 +515,19 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
 
     for i in 0..available_lines {
         let price = y_max - range * Decimal::from(i) / Decimal::from(available_lines.saturating_sub(1).max(1));
-        let price_str = format!("{:.6}", price);
+        
+        let decimals = if range < Decimal::from(10) { 4 } 
+            else if range < Decimal::from(100) { 2 } 
+            else { 1 };
+        let price_str = format!("{:.prec$}", price, prec = decimals);
 
         let mut spans = vec![Span::raw(format!("{:>10}", price_str))];
 
         if let Some(color) = pnl_color {
             if let Some(pos) = current_pos {
                 let entry = pos.entry_price;
-                if (price >= entry && price <= max_price && pos.side == Side::Buy)
-                    || (price <= entry && price >= min_price && pos.side == Side::Sell)
+                if (price >= entry && price <= y_max && pos.side == Side::Buy)
+                    || (price <= entry && price >= y_min && pos.side == Side::Sell)
                 {
                     spans.push(Span::styled(" █", Style::default().fg(color)));
                 }
