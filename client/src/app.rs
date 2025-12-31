@@ -37,7 +37,7 @@ const COMMANDS: &[Cmd] = &[
     Cmd { name: "tf", aliases: &[] },
     Cmd { name: "level", aliases: &["lv"] },
     Cmd { name: "clevel", aliases: &["clv"] },
-    Cmd { name: "sound", aliases: &[] },
+    Cmd { name: "sound", aliases: &["snd"] },
 ];
 
 fn match_command(input: &str) -> Option<&'static str> {
