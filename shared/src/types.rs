@@ -84,6 +84,9 @@ pub struct Position {
     pub entry_price: Decimal,
     pub unrealized_pnl: Decimal,
     pub leverage: u32,
+    pub take_profit: Option<Decimal>,
+    pub stop_loss: Option<Decimal>,
+    pub trailing_stop: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

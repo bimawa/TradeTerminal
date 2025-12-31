@@ -2,6 +2,9 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use tokio::sync::mpsc;
@@ -60,6 +63,7 @@ struct PendingRiskOrder {
     side: Side,
     risk_usdt: Decimal,
     sl_price: Decimal,
+    sl_percent: Option<Decimal>,
     symbol: String,
     tp_percent: Option<Decimal>,
 }
@@ -123,9 +127,14 @@ pub struct App {
     pub chart_levels: Vec<Decimal>,
     pub chart_offset: usize,
     pub chart_zoom: u8,
+    pub chart_zoom_v: u8,
+    pub chart_offset_v: i32,
     pub sound_enabled: bool,
     audio_player: Option<AudioPlayer>,
 }
+
+const HISTORY_FILE: &str = ".trade_history";
+const MAX_HISTORY: usize = 500;
 
 impl App {
     pub fn new(
@@ -147,7 +156,7 @@ impl App {
             server_rx,
             pending_risk_order: None,
             pending_action: None,
-            command_history: Vec::new(),
+            command_history: Self::load_history(),
             history_index: None,
             candles: Vec::new(),
             trades: VecDeque::with_capacity(100),
@@ -155,8 +164,40 @@ impl App {
             chart_levels: Vec::new(),
             chart_offset: 0,
             chart_zoom: 2,
+            chart_zoom_v: 1,
+            chart_offset_v: 0,
             sound_enabled: true,
             audio_player: AudioPlayer::new(),
+        }
+    }
+
+    fn history_path() -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(HISTORY_FILE)
+    }
+
+    fn load_history() -> Vec<String> {
+        let path = Self::history_path();
+        if let Ok(file) = fs::File::open(&path) {
+            let reader = BufReader::new(file);
+            reader
+                .lines()
+                .filter_map(|l| l.ok())
+                .filter(|l| !l.is_empty())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn save_history(&self) {
+        let path = Self::history_path();
+        if let Ok(mut file) = fs::File::create(&path) {
+            let start = self.command_history.len().saturating_sub(MAX_HISTORY);
+            for cmd in &self.command_history[start..] {
+                let _ = writeln!(file, "{}", cmd);
+            }
         }
     }
 
@@ -177,6 +218,17 @@ impl App {
                         Tab::Positions => Tab::Trade,
                         Tab::Trade => Tab::Chart,
                         Tab::Chart => Tab::Orders,
+                    };
+                    if self.tab == Tab::Chart && self.candles.is_empty() {
+                        self.refresh_candles().await?;
+                    }
+                }
+                KeyCode::BackTab => {
+                    self.tab = match self.tab {
+                        Tab::Orders => Tab::Chart,
+                        Tab::Positions => Tab::Orders,
+                        Tab::Trade => Tab::Positions,
+                        Tab::Chart => Tab::Trade,
                     };
                     if self.tab == Tab::Chart && self.candles.is_empty() {
                         self.refresh_candles().await?;
@@ -203,6 +255,28 @@ impl App {
                         self.chart_zoom -= 1;
                     }
                 }
+                KeyCode::Char(']') if self.tab == Tab::Chart => {
+                    if self.chart_zoom_v < 10 {
+                        self.chart_zoom_v += 1;
+                    }
+                }
+                KeyCode::Char('[') if self.tab == Tab::Chart => {
+                    if self.chart_zoom_v > 1 {
+                        self.chart_zoom_v -= 1;
+                    }
+                }
+                KeyCode::Char('k') if self.tab == Tab::Chart => {
+                    self.chart_offset_v += 10;
+                }
+                KeyCode::Char('j') if self.tab == Tab::Chart => {
+                    self.chart_offset_v -= 10;
+                }
+                KeyCode::Char('0') if self.tab == Tab::Chart => {
+                    self.chart_offset = 0;
+                    self.chart_zoom = 2;
+                    self.chart_zoom_v = 1;
+                    self.chart_offset_v = 0;
+                }
                 _ => {}
             },
             InputMode::Command => match key.code {
@@ -220,6 +294,7 @@ impl App {
                     self.history_index = None;
                     if !cmd.is_empty() {
                         self.command_history.push(cmd.clone());
+                        self.save_history();
                     }
                     self.execute_command(&cmd).await?;
                 }
@@ -383,12 +458,9 @@ impl App {
                     self.candles.clear();
                     self.trades.clear();
                     self.chart_offset = 0;
+                    self.chart_offset_v = 0;
                     self.messages.push(format!("Symbol: {}", self.symbol));
-                    self.refresh_ticker().await?;
-                    if self.tab == Tab::Chart {
-                        self.refresh_candles().await?;
-                        self.subscribe_chart().await?;
-                    }
+                    self.subscribe_chart().await?;
                 }
             }
             Some("positions") => {
@@ -527,13 +599,8 @@ impl App {
             }
         };
 
-        let sl_price = match Decimal::from_str(args[1]) {
-            Ok(v) => v,
-            Err(_) => {
-                self.messages.push("Invalid SL price".to_string());
-                return Ok(());
-            }
-        };
+        let sl_arg = args[1];
+        let sl_is_percent = sl_arg.ends_with('%');
 
         let limit_price = args.get(2).and_then(|p| {
             if p == &"-" { None } else { Decimal::from_str(p).ok() }
@@ -541,18 +608,56 @@ impl App {
 
         let tp_percent = args.get(3).and_then(|p| Decimal::from_str(p).ok());
 
-        if let Some(entry_price) = limit_price {
-            self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_percent).await?;
+        if sl_is_percent {
+            let sl_percent = match Decimal::from_str(sl_arg.trim_end_matches('%')) {
+                Ok(v) => v,
+                Err(_) => {
+                    self.messages.push("Invalid SL percent".to_string());
+                    return Ok(());
+                }
+            };
+
+            if let Some(entry_price) = limit_price {
+                let sl_price = match side {
+                    Side::Buy => entry_price * (Decimal::ONE - sl_percent / Decimal::from(100)),
+                    Side::Sell => entry_price * (Decimal::ONE + sl_percent / Decimal::from(100)),
+                };
+                self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_percent).await?;
+            } else {
+                self.pending_risk_order = Some(PendingRiskOrder {
+                    side,
+                    risk_usdt,
+                    sl_price: Decimal::ZERO,
+                    sl_percent: Some(sl_percent),
+                    symbol: self.symbol.clone(),
+                    tp_percent,
+                });
+                self.messages.push("Fetching price...".to_string());
+                self.refresh_ticker().await?;
+            }
         } else {
-            self.pending_risk_order = Some(PendingRiskOrder {
-                side,
-                risk_usdt,
-                sl_price,
-                symbol: self.symbol.clone(),
-                tp_percent,
-            });
-            self.messages.push("Fetching price...".to_string());
-            self.refresh_ticker().await?;
+            let sl_price = match Decimal::from_str(sl_arg) {
+                Ok(v) => v,
+                Err(_) => {
+                    self.messages.push("Invalid SL price".to_string());
+                    return Ok(());
+                }
+            };
+
+            if let Some(entry_price) = limit_price {
+                self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_percent).await?;
+            } else {
+                self.pending_risk_order = Some(PendingRiskOrder {
+                    side,
+                    risk_usdt,
+                    sl_price,
+                    sl_percent: None,
+                    symbol: self.symbol.clone(),
+                    tp_percent,
+                });
+                self.messages.push("Fetching price...".to_string());
+                self.refresh_ticker().await?;
+            }
         }
 
         Ok(())
@@ -726,16 +831,11 @@ impl App {
     async fn refresh(&mut self) -> Result<()> {
         self.refresh_orders().await?;
         self.refresh_positions().await?;
-        self.refresh_ticker().await?;
-        if self.tab == Tab::Chart {
-            self.refresh_candles().await?;
-        }
         Ok(())
     }
 
     pub async fn auto_refresh(&mut self) -> Result<()> {
         if self.connected {
-            self.refresh_ticker().await?;
             self.refresh_orders().await?;
             self.refresh_positions().await?;
         }
@@ -791,8 +891,8 @@ impl App {
         self.messages.push("Commands:".to_string());
         self.messages.push("  buy <qty> [price]              - Place buy order".to_string());
         self.messages.push("  sell <qty> [price]             - Place sell order".to_string());
-        self.messages.push("  buyrisk <risk$> <sl> [limit]   - Long with risk calc".to_string());
-        self.messages.push("  sellrisk <risk$> <sl> [limit]  - Short with risk calc".to_string());
+        self.messages.push("  buyrisk <risk$> <sl|sl%> [lim] - Long with risk calc".to_string());
+        self.messages.push("  sellrisk <risk$> <sl|sl%> [lim]- Short with risk calc".to_string());
         self.messages.push("  cancel <id>                    - Cancel order".to_string());
         self.messages.push("  cancelall                      - Cancel all orders".to_string());
         self.messages.push("  symbol <sym>                   - Set symbol".to_string());
@@ -854,6 +954,7 @@ impl App {
                     self.connected = true;
                     self.messages.push("Connected to server".to_string());
                     self.refresh().await?;
+                    self.subscribe_chart().await?;
                 }
                 ServerPayload::OrderPlaced(order) => {
                     self.messages.push(format!("Order placed: {}", order.id));
@@ -901,10 +1002,18 @@ impl App {
                     if let Some(pending) = self.pending_risk_order.take() {
                         if ticker.symbol.0 == pending.symbol {
                             self.last_price = Some(ticker.last_price);
+                            let sl_price = if let Some(sl_pct) = pending.sl_percent {
+                                match pending.side {
+                                    Side::Buy => ticker.last_price * (Decimal::ONE - sl_pct / Decimal::from(100)),
+                                    Side::Sell => ticker.last_price * (Decimal::ONE + sl_pct / Decimal::from(100)),
+                                }
+                            } else {
+                                pending.sl_price
+                            };
                             if let Err(e) = self.execute_risk_order(
                                 pending.side,
                                 pending.risk_usdt,
-                                pending.sl_price,
+                                sl_price,
                                 None,
                                 pending.tp_percent,
                             ).await {
@@ -934,11 +1043,12 @@ impl App {
                 }
                 ServerPayload::TradeUpdate(trade) => {
                     let is_buy = trade.side == Side::Buy;
+                    self.last_price = Some(trade.price);
                     self.trades.push_front(trade);
                     if self.trades.len() > 100 {
                         self.trades.pop_back();
                     }
-                    
+
                     if self.sound_enabled && self.tab == Tab::Chart {
                         if let Some(ref player) = self.audio_player {
                             player.tick(is_buy);

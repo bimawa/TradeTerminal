@@ -167,7 +167,7 @@ fn draw_positions(f: &mut Frame, app: &App, area: Rect) {
 fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(30), Constraint::Percentage(30)])
         .split(area);
 
     let help_text = vec![
@@ -177,43 +177,86 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(""),
         Line::from(Span::styled(" Commands", Style::default().add_modifier(Modifier::BOLD))),
-        Line::from("  :buy <qty> [price]                :sell <qty> [price]"),
-        Line::from("  :buyrisk <risk$> <sl> [lim] [tp%] :sellrisk ..."),
-        Line::from("  :ts <trigger> <callback>          trailing stop (% or abs)"),
-        Line::from("  :cancel <id>   :cancelall         :symbol <sym>"),
+        Line::from("  :buy <qty> [price]"),
+        Line::from("  :sell <qty> [price]"),
+        Line::from("  :buyrisk <risk$> <sl> [lim] [tp%]"),
+        Line::from("  :sellrisk <risk$> <sl> [lim] [tp%]"),
+        Line::from("  :ts <trigger> <callback>"),
+        Line::from("  :cancel <id>   :cancelall"),
         Line::from(""),
         Line::from(Span::styled(" Shortcuts", Style::default().add_modifier(Modifier::BOLD))),
-        Line::from("  :b :s :br :sr :c :ca   |=pipe  ;=chain"),
-        Line::from(""),
-        Line::from(Span::styled(" Examples", Style::default().add_modifier(Modifier::BOLD))),
-        Line::from("  :br 10 95000           market, $10 risk, SL@95000"),
-        Line::from("  :br 10 95000 - 2       market, SL@95000, TP +2%"),
-        Line::from("  :br 10 95000 | ts 2% 0.5%  with trailing stop"),
-        Line::from("  :ts 2% 0.5%            trigger +2%, callback 0.5%"),
-        Line::from("  :ts 97000 500          trigger @97000, callback $500"),
+        Line::from("  :b :s :br :sr :c :ca"),
+        Line::from("  |=pipe  ;=chain"),
     ];
 
     let help = Paragraph::new(help_text)
         .block(Block::default().borders(Borders::ALL).title(" Trade "));
 
-    let keys_text = vec![
+    let chart_text = vec![
+        Line::from(Span::styled(" Chart Commands", Style::default().add_modifier(Modifier::BOLD))),
         Line::from(""),
+        Line::from("  :chart        Open chart"),
+        Line::from("  :tf <int>     Timeframe"),
+        Line::from("  :level <p>    Add level"),
+        Line::from("  :clevel [p]   Clear level"),
+        Line::from("  :sound        Toggle sound"),
+        Line::from(""),
+        Line::from(Span::styled(" Chart Keys", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("  h/l     Scroll horizontal"),
+        Line::from("  j/k     Scroll vertical"),
+        Line::from("  +/-     Zoom horizontal"),
+        Line::from("  [/]     Zoom vertical"),
+        Line::from("  0       Reset view"),
+        Line::from(""),
+        Line::from(Span::styled(" Chart Lines", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ━", Style::default().fg(Color::Blue)),
+            Span::raw(" Entry"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ━", Style::default().fg(Color::Green)),
+            Span::raw(" Take Profit"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ━", Style::default().fg(Color::Red)),
+            Span::raw(" Stop Loss"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ━", Style::default().fg(Color::Yellow)),
+            Span::raw(" Trailing Stop"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ━", Style::default().fg(Color::Cyan)),
+            Span::raw(" Buy Order"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ━", Style::default().fg(Color::Magenta)),
+            Span::raw(" Sell Order"),
+        ]),
+    ];
+
+    let chart_help = Paragraph::new(chart_text)
+        .block(Block::default().borders(Borders::ALL).title(" Chart "));
+
+    let keys_text = vec![
         Line::from(Span::styled(" Keyboard", Style::default().add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from("  Tab       Switch tabs"),
-        Line::from("  r         Refresh data"),
+        Line::from("  Tab/S-Tab Switch tabs"),
+        Line::from("  r         Refresh"),
         Line::from("  :         Command mode"),
         Line::from("  Esc       Exit mode"),
         Line::from("  Enter     Execute"),
         Line::from("  q         Quit"),
-        Line::from("  Ctrl+C    Force quit"),
     ];
 
     let keys = Paragraph::new(keys_text)
         .block(Block::default().borders(Borders::ALL).title(" Keys "));
 
     f.render_widget(help, chunks[0]);
-    f.render_widget(keys, chunks[1]);
+    f.render_widget(chart_help, chunks[1]);
+    f.render_widget(keys, chunks[2]);
 }
 
 fn draw_chart(f: &mut Frame, app: &App, area: Rect) {
@@ -226,8 +269,9 @@ fn draw_chart(f: &mut Frame, app: &App, area: Rect) {
         ])
         .split(area);
 
+    let chart_width = chunks[0].width;
     draw_candlesticks(f, app, chunks[0]);
-    draw_price_scale(f, app, chunks[1]);
+    draw_price_scale(f, app, chunks[1], chart_width);
     draw_trades_tape(f, app, chunks[2]);
 }
 
@@ -259,17 +303,23 @@ fn draw_candlesticks(f: &mut Frame, app: &App, area: Rect) {
         },
     );
 
-    let padding = (max_price - min_price) * Decimal::from_str_exact("0.05").unwrap_or(Decimal::ZERO);
-    let y_min = (min_price - padding).to_string().parse::<f64>().unwrap_or(0.0);
-    let y_max = (max_price + padding).to_string().parse::<f64>().unwrap_or(100.0);
+    let base_padding = (max_price - min_price) * Decimal::from_str_exact("0.05").unwrap_or(Decimal::ZERO);
+    let zoom_factor = Decimal::from(app.chart_zoom_v);
+    let range = max_price - min_price;
+    let center = min_price + range / Decimal::from(2);
+    let half_range = (range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
+    
+    let tick_size = range / Decimal::from(100);
+    let v_offset = tick_size * Decimal::from(app.chart_offset_v);
+    let adjusted_center = center + v_offset;
+    
+    let y_min = (adjusted_center - half_range).to_string().parse::<f64>().unwrap_or(0.0);
+    let y_max = (adjusted_center + half_range).to_string().parse::<f64>().unwrap_or(100.0);
 
     let title = format!(
-        " {} tf:{} candles:{} offset:{} zoom:{} ←/→ +/- ",
+        " {} tf:{} h/l +/- [/] j/k 0=reset ",
         app.symbol,
         app.chart_interval,
-        visible_candles.len(),
-        app.chart_offset,
-        app.chart_zoom
     );
 
     let canvas = Canvas::default()
@@ -292,16 +342,78 @@ fn draw_candlesticks(f: &mut Frame, app: &App, area: Rect) {
 
             for pos in &app.positions {
                 if pos.symbol.0 == app.symbol {
+                    let x_end = (visible_count * (candle_width + 1)) as f64;
+
                     let entry_y = pos.entry_price.to_string().parse::<f64>().unwrap_or(0.0);
-                    let color = if pos.side == Side::Buy { Color::Green } else { Color::Red };
                     if entry_y >= y_min && entry_y <= y_max {
                         ctx.draw(&CanvasLine {
                             x1: 0.0,
                             y1: entry_y,
-                            x2: (visible_count * (candle_width + 1)) as f64,
+                            x2: x_end,
                             y2: entry_y,
-                            color,
+                            color: Color::Blue,
                         });
+                    }
+
+                    if let Some(tp) = pos.take_profit {
+                        let tp_y = tp.to_string().parse::<f64>().unwrap_or(0.0);
+                        if tp_y >= y_min && tp_y <= y_max {
+                            ctx.draw(&CanvasLine {
+                                x1: 0.0,
+                                y1: tp_y,
+                                x2: x_end,
+                                y2: tp_y,
+                                color: Color::Green,
+                            });
+                        }
+                    }
+
+                    if let Some(sl) = pos.stop_loss {
+                        let sl_y = sl.to_string().parse::<f64>().unwrap_or(0.0);
+                        if sl_y >= y_min && sl_y <= y_max {
+                            ctx.draw(&CanvasLine {
+                                x1: 0.0,
+                                y1: sl_y,
+                                x2: x_end,
+                                y2: sl_y,
+                                color: Color::Red,
+                            });
+                        }
+                    }
+
+                    if let Some(ts) = pos.trailing_stop {
+                        let ts_y = ts.to_string().parse::<f64>().unwrap_or(0.0);
+                        if ts_y >= y_min && ts_y <= y_max {
+                            ctx.draw(&CanvasLine {
+                                x1: 0.0,
+                                y1: ts_y,
+                                x2: x_end,
+                                y2: ts_y,
+                                color: Color::Yellow,
+                            });
+                        }
+                    }
+                }
+            }
+
+            for order in &app.orders {
+                if order.symbol.0 == app.symbol {
+                    if let Some(price) = order.price {
+                        let order_y = price.to_string().parse::<f64>().unwrap_or(0.0);
+                        if order_y >= y_min && order_y <= y_max {
+                            let color = if order.side == Side::Buy {
+                                Color::Cyan
+                            } else {
+                                Color::Magenta
+                            };
+                            ctx.draw(&CanvasLine {
+                                x1: 0.0,
+                                y1: order_y,
+                                x2: (visible_count * (candle_width + 1)) as f64,
+                                y2: order_y,
+                                color,
+                            });
+                        }
                     }
                 }
             }
@@ -313,19 +425,26 @@ fn draw_candlesticks(f: &mut Frame, app: &App, area: Rect) {
                 let high = candle.high.to_string().parse::<f64>().unwrap_or(0.0);
                 let low = candle.low.to_string().parse::<f64>().unwrap_or(0.0);
 
+                if high < y_min || low > y_max {
+                    continue;
+                }
+
                 let is_bullish = close >= open;
                 let color = if is_bullish { Color::Green } else { Color::Red };
 
+                let wick_low = low.max(y_min);
+                let wick_high = high.min(y_max);
+
                 ctx.draw(&CanvasLine {
                     x1: x,
-                    y1: low,
+                    y1: wick_low,
                     x2: x,
-                    y2: high,
+                    y2: wick_high,
                     color,
                 });
 
-                let body_top = open.max(close);
-                let body_bottom = open.min(close);
+                let body_top = open.max(close).min(y_max);
+                let body_bottom = open.min(close).max(y_min);
                 let body_height = body_top - body_bottom;
 
                 if body_height > 0.0 {
@@ -343,25 +462,44 @@ fn draw_candlesticks(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(canvas, area);
 }
 
-fn draw_price_scale(f: &mut Frame, app: &App, area: Rect) {
+fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
     if app.candles.is_empty() {
         let block = Block::default().borders(Borders::ALL).title(" Price ");
         f.render_widget(block, area);
         return;
     }
 
-    let visible_count = 50.min(app.candles.len());
+    let candle_width = app.chart_zoom as usize;
+    let visible_count = (chart_width as usize).saturating_sub(2) / (candle_width + 1);
     let start_idx = app.candles.len().saturating_sub(visible_count + app.chart_offset);
     let end_idx = app.candles.len().saturating_sub(app.chart_offset);
     let visible_candles = &app.candles[start_idx..end_idx];
+
+    if visible_candles.is_empty() {
+        let block = Block::default().borders(Borders::ALL).title(" Price ");
+        f.render_widget(block, area);
+        return;
+    }
 
     let (min_price, max_price) = visible_candles.iter().fold(
         (Decimal::MAX, Decimal::MIN),
         |(min, max), c| (min.min(c.low), max.max(c.high)),
     );
 
-    let range = max_price - min_price;
-    let step = range / Decimal::from(6);
+    let base_padding = (max_price - min_price) * Decimal::from_str_exact("0.05").unwrap_or(Decimal::ZERO);
+    let zoom_factor = Decimal::from(app.chart_zoom_v);
+    let price_range = max_price - min_price;
+    let center = min_price + price_range / Decimal::from(2);
+    let half_range = (price_range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
+    
+    let tick_size = price_range / Decimal::from(100);
+    let v_offset = tick_size * Decimal::from(app.chart_offset_v);
+    let adjusted_center = center + v_offset;
+    
+    let y_min = adjusted_center - half_range;
+    let y_max = adjusted_center + half_range;
+    let range = y_max - y_min;
+
     let available_lines = (area.height as usize).saturating_sub(2);
 
     let mut lines: Vec<Line> = Vec::new();
@@ -376,8 +514,8 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect) {
     });
 
     for i in 0..available_lines {
-        let price = max_price - step * Decimal::from(i) / Decimal::from(available_lines.max(1));
-        let price_str = format!("{:.2}", price);
+        let price = y_max - range * Decimal::from(i) / Decimal::from(available_lines.saturating_sub(1).max(1));
+        let price_str = format!("{:.6}", price);
 
         let mut spans = vec![Span::raw(format!("{:>10}", price_str))];
 

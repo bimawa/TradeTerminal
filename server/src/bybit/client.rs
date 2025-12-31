@@ -84,6 +84,12 @@ struct BybitPosition {
     #[serde(rename = "unrealisedPnl")]
     unrealised_pnl: String,
     leverage: String,
+    #[serde(rename = "takeProfit", default)]
+    take_profit: String,
+    #[serde(rename = "stopLoss", default)]
+    stop_loss: String,
+    #[serde(rename = "trailingStop", default)]
+    trailing_stop: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -439,6 +445,14 @@ fn convert_order(o: BybitOrder) -> Order {
 }
 
 fn convert_position(p: BybitPosition) -> Position {
+    let parse_opt = |s: &str| -> Option<Decimal> {
+        if s.is_empty() || s == "0" {
+            None
+        } else {
+            s.parse().ok()
+        }
+    };
+
     Position {
         symbol: Symbol::new(p.symbol),
         side: if p.side == "Buy" { Side::Buy } else { Side::Sell },
@@ -446,6 +460,9 @@ fn convert_position(p: BybitPosition) -> Position {
         entry_price: p.avg_price.parse().unwrap_or_default(),
         unrealized_pnl: p.unrealised_pnl.parse().unwrap_or_default(),
         leverage: p.leverage.parse().unwrap_or(1),
+        take_profit: parse_opt(&p.take_profit),
+        stop_loss: parse_opt(&p.stop_loss),
+        trailing_stop: parse_opt(&p.trailing_stop),
     }
 }
 
