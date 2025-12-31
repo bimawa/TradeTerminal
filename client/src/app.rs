@@ -37,7 +37,7 @@ const COMMANDS: &[Cmd] = &[
     Cmd { name: "tf", aliases: &[] },
     Cmd { name: "level", aliases: &["lv"] },
     Cmd { name: "clevel", aliases: &["clv"] },
-    Cmd { name: "mute", aliases: &[] },
+    Cmd { name: "sound", aliases: &[] },
 ];
 
 fn match_command(input: &str) -> Option<&'static str> {
@@ -580,7 +580,7 @@ impl App {
                     self.messages.push("All levels cleared".to_string());
                 }
             }
-            Some("mute") => {
+            Some("sound") => {
                 self.sound_enabled = !self.sound_enabled;
                 self.messages.push(format!("Sound: {}", if self.sound_enabled { "ON" } else { "OFF" }));
             }
@@ -1011,7 +1011,7 @@ impl App {
                     let had_position = self.positions.iter().any(|p| p.symbol.0 == self.symbol);
                     let has_position = positions.iter().any(|p| p.symbol.0 == self.symbol);
                     self.positions = positions;
-                    
+
                     if !had_position && has_position {
                         if let Some(pending) = self.pending_action.take() {
                             if pending.symbol == self.symbol {
