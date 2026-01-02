@@ -135,6 +135,8 @@ pub struct App {
     audio_player: Option<AudioPlayer>,
     pub copy_index: usize,
     clipboard: Option<arboard::Clipboard>,
+    pub panic_stop_remaining_ms: Option<u64>,
+    pub panic_stop_active: bool,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -174,6 +176,8 @@ impl App {
             audio_player: AudioPlayer::new(),
             copy_index: 0,
             clipboard: arboard::Clipboard::new().ok(),
+            panic_stop_remaining_ms: None,
+            panic_stop_active: false,
         }
     }
 
@@ -1098,6 +1102,20 @@ impl App {
                 }
                 ServerPayload::TrailingStopSet { symbol } => {
                     self.messages.push(format!("Trailing stop set for {}", symbol.0));
+                }
+                ServerPayload::PanicStopActivated { symbol, timeout_secs } => {
+                    self.messages.push(format!("Panic stop activated for {} ({}s)", symbol.0, timeout_secs));
+                    self.panic_stop_active = true;
+                    self.panic_stop_remaining_ms = Some((timeout_secs as u64) * 1000);
+                }
+                ServerPayload::PanicStopStatus { symbol: _, remaining_ms, active } => {
+                    self.panic_stop_active = active;
+                    self.panic_stop_remaining_ms = if active { Some(remaining_ms) } else { None };
+                }
+                ServerPayload::PanicStopTriggered { symbol } => {
+                    self.messages.push(format!("Panic stop triggered for {} - market close executed", symbol.0));
+                    self.panic_stop_active = false;
+                    self.panic_stop_remaining_ms = None;
                 }
                 ServerPayload::OrderError { message } => {
                     self.messages.push(format!("Order error: {}", message));
