@@ -54,7 +54,8 @@ async fn handle_connection(
 
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
     let bybit_for_timer = bybit.clone();
-    let handler = ClientHandler::new(bybit);
+    let panic_stop_state: Arc<Mutex<Option<PanicStopState>>> = Arc::new(Mutex::new(None));
+    let handler = ClientHandler::new(bybit, panic_stop_state.clone());
 
     let connected_msg = ServerMessage::new(ServerPayload::Connected);
     write
@@ -95,7 +96,6 @@ async fn handle_connection(
         }
     });
 
-    let panic_stop_state: Arc<Mutex<Option<PanicStopState>>> = Arc::new(Mutex::new(None));
     let chart_symbol: Arc<Mutex<Option<Symbol>>> = Arc::new(Mutex::new(None));
 
     let (chart_event_tx, mut chart_event_rx) = mpsc::channel::<WsEvent>(100);
