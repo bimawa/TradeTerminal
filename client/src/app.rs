@@ -10,8 +10,8 @@ use std::str::FromStr;
 use tokio::sync::mpsc;
 use trade_shared::{
     calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, Order,
-    OrderRequest, OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol,
-    TimeInForce, Trade, TrailingStopRequest,
+    OrderRequest, OrderType, PanicStopRequest, Position, RiskError, ServerMessage, ServerPayload,
+    Side, Symbol, TimeInForce, Trade, TrailingStopRequest,
 };
 
 use crate::audio::AudioPlayer;
@@ -861,6 +861,64 @@ impl App {
             "Setting TS: {} trigger@{:.2}, callback {:.2}",
             if position_side == Side::Buy { "LONG" } else { "SHORT" },
             active_price, trailing_stop
+        ));
+
+        Ok(())
+    }
+
+    async fn set_panic_stop(&mut self, args: &[&str], side: Option<Side>) -> Result<()> {
+        let timeout_secs: u32 = match args[0].parse() {
+            Ok(v) => v,
+            Err(_) => {
+                self.messages.push("Invalid timeout value".to_string());
+                return Ok(());
+            }
+        };
+
+        let trigger_price = if args.len() >= 2 {
+            match Decimal::from_str(args[1]) {
+                Ok(v) => Some(v),
+                Err(_) => {
+                    self.messages.push("Invalid trigger price".to_string());
+                    return Ok(());
+                }
+            }
+        } else {
+            None
+        };
+
+        let position_side = match side {
+            Some(s) => s,
+            None => {
+                let pos = self.positions.iter().find(|p| p.symbol.0 == self.symbol);
+                match pos {
+                    Some(p) => p.side,
+                    None => {
+                        self.messages.push("No position found for panic stop".to_string());
+                        return Ok(());
+                    }
+                }
+            }
+        };
+
+        let req = PanicStopRequest {
+            symbol: Symbol::new(&self.symbol),
+            side: position_side,
+            timeout_secs,
+            trigger_price,
+        };
+
+        let msg = ClientMessage::new(ClientPayload::PanicStop(req));
+        self.conn_tx.send(msg).await?;
+
+        let trigger_str = trigger_price
+            .map(|p| format!(" trigger@{:.2}", p))
+            .unwrap_or_default();
+        self.messages.push(format!(
+            "Setting panic stop: {} {}s{}",
+            if position_side == Side::Buy { "LONG" } else { "SHORT" },
+            timeout_secs,
+            trigger_str
         ));
 
         Ok(())
