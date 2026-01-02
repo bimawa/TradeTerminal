@@ -1,0 +1,209 @@
+{
+  "project_root": "/Users/bimawa/Developing/Projects/TradeTerminal",
+  "project_type": "monorepo",
+  "services": {
+    "server": {
+      "name": "server",
+      "path": "/Users/bimawa/Developing/Projects/TradeTerminal/server",
+      "language": "Rust",
+      "framework": null,
+      "type": "backend",
+      "package_manager": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/main.rs",
+      "dockerfile": "Dockerfile",
+      "environment": {
+        "variables": {
+          "BYBIT_API_KEY": {
+            "value": "<REDACTED>",
+            "source": "../.env",
+            "type": "string",
+            "sensitive": true,
+            "required": false
+          },
+          "BYBIT_API_SECRET": {
+            "value": "<REDACTED>",
+            "source": "../.env",
+            "type": "string",
+            "sensitive": true,
+            "required": false
+          },
+          "BYBIT_TESTNET": {
+            "value": "false",
+            "source": "../.env",
+            "type": "boolean",
+            "sensitive": false,
+            "required": false
+          },
+          "SERVER_URL": {
+            "value": "ws://127.0.0.1:9000",
+            "source": "../.env",
+            "type": "path",
+            "sensitive": false,
+            "required": false
+          },
+          "RUST_LOG": {
+            "value": null,
+            "source": "../docker-compose.yml",
+            "type": "string",
+            "sensitive": false,
+            "required": false
+          },
+          "LISTEN_ADDR": {
+            "value": null,
+            "source": "../docker-compose.yml",
+            "type": "string",
+            "sensitive": false,
+            "required": false
+          }
+        },
+        "required_count": 0,
+        "optional_count": 0,
+        "detected_count": 6
+      }
+    },
+    "shared": {
+      "name": "shared",
+      "path": "/Users/bimawa/Developing/Projects/TradeTerminal/shared",
+      "language": "Rust",
+      "framework": null,
+      "type": "library",
+      "package_manager": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/lib.rs",
+      "environment": {
+        "variables": {
+          "BYBIT_API_KEY": {
+            "value": "<REDACTED>",
+            "source": "../.env",
+            "type": "string",
+            "sensitive": true,
+            "required": false
+          },
+          "BYBIT_API_SECRET": {
+            "value": "<REDACTED>",
+            "source": "../.env",
+            "type": "string",
+            "sensitive": true,
+            "required": false
+          },
+          "BYBIT_TESTNET": {
+            "value": "false",
+            "source": "../.env",
+            "type": "boolean",
+            "sensitive": false,
+            "required": false
+          },
+          "SERVER_URL": {
+            "value": "ws://127.0.0.1:9000",
+            "source": "../.env",
+            "type": "path",
+            "sensitive": false,
+            "required": false
+          },
+          "RUST_LOG": {
+            "value": null,
+            "source": "../docker-compose.yml",
+            "type": "string",
+            "sensitive": false,
+            "required": false
+          },
+          "LISTEN_ADDR": {
+            "value": null,
+            "source": "../docker-compose.yml",
+            "type": "string",
+            "sensitive": false,
+            "required": false
+          }
+        },
+        "required_count": 0,
+        "optional_count": 0,
+        "detected_count": 6
+      }
+    },
+    "client": {
+      "name": "client",
+      "path": "/Users/bimawa/Developing/Projects/TradeTerminal/client",
+      "language": "Rust",
+      "framework": null,
+      "type": "frontend",
+      "package_manager": "cargo",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "entry_point": "src/main.rs",
+      "environment": {
+        "variables": {
+          "BYBIT_API_KEY": {
+            "value": "<REDACTED>",
+            "source": "../.env",
+            "type": "string",
+            "sensitive": true,
+            "required": false
+          },
+          "BYBIT_API_SECRET": {
+            "value": "<REDACTED>",
+            "source": "../.env",
+            "type": "string",
+            "sensitive": true,
+            "required": false
+          },
+          "BYBIT_TESTNET": {
+            "value": "false",
+            "source": "../.env",
+            "type": "boolean",
+            "sensitive": false,
+            "required": false
+          },
+          "SERVER_URL": {
+            "value": "ws://127.0.0.1:9000",
+            "source": "../.env",
+            "type": "path",
+            "sensitive": false,
+            "required": false
+          },
+          "RUST_LOG": {
+            "value": null,
+            "source": "../docker-compose.yml",
+            "type": "string",
+            "sensitive": false,
+            "required": false
+          },
+          "LISTEN_ADDR": {
+            "value": null,
+            "source": "../docker-compose.yml",
+            "type": "string",
+            "sensitive": false,
+            "required": false
+          }
+        },
+        "required_count": 0,
+        "optional_count": 0,
+        "detected_count": 6
+      },
+      "consumes": [
+        "server.api"
+      ]
+    }
+  },
+  "infrastructure": {
+    "docker_compose": "docker-compose.yml",
+    "docker_services": [
+      "server"
+    ]
+  },
+  "conventions": {}
+}

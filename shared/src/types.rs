@@ -130,6 +130,14 @@ pub struct Trade {
     pub side: Side,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PanicStopRequest {
+    pub symbol: Symbol,
+    pub side: Side,
+    pub timeout_secs: u32,
+    pub trigger_price: Option<Decimal>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,6 +257,9 @@ mod tests {
             entry_price: dec!(94500),
             unrealized_pnl: dec!(50.25),
             leverage: 10,
+            take_profit: None,
+            stop_loss: None,
+            trailing_stop: None,
         };
 
         let json = serde_json::to_string(&pos).unwrap();
@@ -309,6 +320,9 @@ mod tests {
                 entry_price: dec!(94000),
                 unrealized_pnl: dec!(10),
                 leverage: 5,
+                take_profit: None,
+                stop_loss: None,
+                trailing_stop: None,
             }],
         };
 
@@ -319,5 +333,40 @@ mod tests {
         assert_eq!(parsed.positions.len(), 1);
         assert_eq!(parsed.balances[0].asset, "USDT");
         assert_eq!(parsed.positions[0].symbol.0, "BTCUSDT");
+    }
+
+    #[test]
+    fn test_panic_stop_request_serialization() {
+        let req = PanicStopRequest {
+            symbol: Symbol::new("BTCUSDT"),
+            side: Side::Buy,
+            timeout_secs: 5,
+            trigger_price: Some(dec!(95000)),
+        };
+
+        let json = serde_json::to_string(&req).unwrap();
+        let parsed: PanicStopRequest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.symbol.0, "BTCUSDT");
+        assert_eq!(parsed.side, Side::Buy);
+        assert_eq!(parsed.timeout_secs, 5);
+        assert_eq!(parsed.trigger_price, Some(dec!(95000)));
+    }
+
+    #[test]
+    fn test_panic_stop_request_without_trigger_price() {
+        let req = PanicStopRequest {
+            symbol: Symbol::new("ETHUSDT"),
+            side: Side::Sell,
+            timeout_secs: 3,
+            trigger_price: None,
+        };
+
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"trigger_price\":null"));
+
+        let parsed: PanicStopRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.timeout_secs, 3);
+        assert!(parsed.trigger_price.is_none());
     }
 }

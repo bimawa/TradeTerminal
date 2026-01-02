@@ -1,17 +1,20 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
+use tokio::time::Instant;
 use trade_shared::{ClientMessage, ClientPayload, ServerMessage, ServerPayload};
 
 use crate::bybit::BybitClient;
+use crate::server::PanicStopState;
 
 pub struct ClientHandler {
     bybit: Arc<BybitClient>,
+    panic_stop_state: Arc<Mutex<Option<PanicStopState>>>,
 }
 
 impl ClientHandler {
-    pub fn new(bybit: Arc<BybitClient>) -> Self {
-        Self { bybit }
+    pub fn new(bybit: Arc<BybitClient>, panic_stop_state: Arc<Mutex<Option<PanicStopState>>>) -> Self {
+        Self { bybit, panic_stop_state }
     }
 
     pub async fn handle(&self, msg: ClientMessage, tx: &mpsc::Sender<ServerMessage>) -> Result<()> {
@@ -55,6 +58,23 @@ impl ClientHandler {
                         message: e.to_string(),
                     }),
                 }
+            }
+
+            ClientPayload::PanicStop(req) => {
+                let state = PanicStopState {
+                    symbol: req.symbol.clone(),
+                    side: req.side,
+                    timeout_ms: req.timeout_secs as u64 * 1000,
+                    trigger_price: req.trigger_price,
+                    last_trade_time: Instant::now(),
+                    active: false,
+                };
+                *self.panic_stop_state.lock().await = Some(state);
+                tracing::info!("Panic stop registered for {} {:?} with {}s timeout", req.symbol, req.side, req.timeout_secs);
+                ServerMessage::new(ServerPayload::PanicStopActivated {
+                    symbol: req.symbol,
+                    timeout_secs: req.timeout_secs,
+                })
             }
 
             ClientPayload::GetPositions => match self.bybit.get_positions(None).await {

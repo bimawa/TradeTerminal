@@ -10,8 +10,8 @@ use std::str::FromStr;
 use tokio::sync::mpsc;
 use trade_shared::{
     calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, Order,
-    OrderRequest, OrderType, Position, RiskError, ServerMessage, ServerPayload, Side, Symbol,
-    TimeInForce, Trade, TrailingStopRequest,
+    OrderRequest, OrderType, PanicStopRequest, Position, RiskError, ServerMessage, ServerPayload,
+    Side, Symbol, TimeInForce, Trade, TrailingStopRequest,
 };
 
 use crate::audio::AudioPlayer;
@@ -38,6 +38,7 @@ const COMMANDS: &[Cmd] = &[
     Cmd { name: "level", aliases: &["lv"] },
     Cmd { name: "clevel", aliases: &["clv"] },
     Cmd { name: "sound", aliases: &["snd"] },
+    Cmd { name: "panicStop", aliases: &["ps"] },
 ];
 
 fn match_command(input: &str) -> Option<&'static str> {
@@ -134,6 +135,8 @@ pub struct App {
     audio_player: Option<AudioPlayer>,
     pub copy_index: usize,
     clipboard: Option<arboard::Clipboard>,
+    pub panic_stop_remaining_ms: Option<u64>,
+    pub panic_stop_active: bool,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -173,6 +176,8 @@ impl App {
             audio_player: AudioPlayer::new(),
             copy_index: 0,
             clipboard: arboard::Clipboard::new().ok(),
+            panic_stop_remaining_ms: None,
+            panic_stop_active: false,
         }
     }
 
@@ -452,6 +457,13 @@ impl App {
                     self.messages.push("Usage: ts <trigger> <callback>".to_string());
                 }
             }
+            Some("panicStop") => {
+                if parts.len() >= 2 {
+                    self.set_panic_stop(&parts[1..], Some(pending.side)).await?;
+                } else {
+                    self.messages.push("Usage: ps <seconds> [trigger_price]".to_string());
+                }
+            }
             _ => {
                 self.execute_single_command(&pending.action).await?;
             }
@@ -583,6 +595,13 @@ impl App {
             Some("sound") => {
                 self.sound_enabled = !self.sound_enabled;
                 self.messages.push(format!("Sound: {}", if self.sound_enabled { "ON" } else { "OFF" }));
+            }
+            Some("panicStop") => {
+                if parts.len() >= 2 {
+                    self.set_panic_stop(&parts[1..], None).await?;
+                } else {
+                    self.messages.push("Usage: ps <seconds> [trigger_price]".to_string());
+                }
             }
             _ => {
                 self.messages.push(format!("Unknown command: {}", parts[0]));
@@ -865,6 +884,64 @@ impl App {
         Ok(())
     }
 
+    async fn set_panic_stop(&mut self, args: &[&str], side: Option<Side>) -> Result<()> {
+        let timeout_secs: u32 = match args[0].parse() {
+            Ok(v) => v,
+            Err(_) => {
+                self.messages.push("Invalid timeout value".to_string());
+                return Ok(());
+            }
+        };
+
+        let trigger_price = if args.len() >= 2 {
+            match Decimal::from_str(args[1]) {
+                Ok(v) => Some(v),
+                Err(_) => {
+                    self.messages.push("Invalid trigger price".to_string());
+                    return Ok(());
+                }
+            }
+        } else {
+            None
+        };
+
+        let position_side = match side {
+            Some(s) => s,
+            None => {
+                let pos = self.positions.iter().find(|p| p.symbol.0 == self.symbol);
+                match pos {
+                    Some(p) => p.side,
+                    None => {
+                        self.messages.push("No position found for panic stop".to_string());
+                        return Ok(());
+                    }
+                }
+            }
+        };
+
+        let req = PanicStopRequest {
+            symbol: Symbol::new(&self.symbol),
+            side: position_side,
+            timeout_secs,
+            trigger_price,
+        };
+
+        let msg = ClientMessage::new(ClientPayload::PanicStop(req));
+        self.conn_tx.send(msg).await?;
+
+        let trigger_str = trigger_price
+            .map(|p| format!(" trigger@{:.2}", p))
+            .unwrap_or_default();
+        self.messages.push(format!(
+            "Setting panic stop: {} {}s{}",
+            if position_side == Side::Buy { "LONG" } else { "SHORT" },
+            timeout_secs,
+            trigger_str
+        ));
+
+        Ok(())
+    }
+
     async fn refresh(&mut self) -> Result<()> {
         self.refresh_orders().await?;
         self.refresh_positions().await?;
@@ -1025,6 +1102,20 @@ impl App {
                 }
                 ServerPayload::TrailingStopSet { symbol } => {
                     self.messages.push(format!("Trailing stop set for {}", symbol.0));
+                }
+                ServerPayload::PanicStopActivated { symbol, timeout_secs } => {
+                    self.messages.push(format!("Panic stop activated for {} ({}s)", symbol.0, timeout_secs));
+                    self.panic_stop_active = true;
+                    self.panic_stop_remaining_ms = Some((timeout_secs as u64) * 1000);
+                }
+                ServerPayload::PanicStopStatus { symbol: _, remaining_ms, active } => {
+                    self.panic_stop_active = active;
+                    self.panic_stop_remaining_ms = if active { Some(remaining_ms) } else { None };
+                }
+                ServerPayload::PanicStopTriggered { symbol } => {
+                    self.messages.push(format!("Panic stop triggered for {} - market close executed", symbol.0));
+                    self.panic_stop_active = false;
+                    self.panic_stop_remaining_ms = None;
                 }
                 ServerPayload::OrderError { message } => {
                     self.messages.push(format!("Order error: {}", message));
