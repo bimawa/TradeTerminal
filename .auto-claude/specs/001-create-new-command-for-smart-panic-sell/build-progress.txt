@@ -101,3 +101,68 @@ NOTE: This is an integration testing subtask that requires running build/test
 commands which are not available in this restricted environment. The actual
 implementation work (phases 1-5) is complete. This subtask should be verified
 manually by running the build and test commands outside the sandbox.
+
+=== SESSION 9: MANUAL E2E TEST - subtask-6-2 ===
+
+subtask-6-2: Manual E2E test - standalone ps command
+- Status: REQUIRES MANUAL TESTING
+- All implementation code is complete and committed
+
+Implementation Verification (Code Review):
+✓ client/src/app.rs: panicStop command in COMMANDS array with alias "ps"
+✓ client/src/app.rs: set_panic_stop() method at line 922
+✓ client/src/app.rs: Handler in execute_single_command() at line 599
+✓ client/src/app.rs: Response handlers for PanicStopActivated/Status/Triggered
+✓ server/src/server.rs: PanicStopState struct and timer logic
+✓ client/src/ui.rs: Timer indicator in trades tape (lines 547-564)
+
+=== MANUAL TEST PROCEDURE ===
+
+PREREQUISITES:
+1. Ensure .env file has valid BYBIT_API_KEY, BYBIT_API_SECRET
+2. Set BYBIT_TESTNET=true for safe testing
+3. Have a small test balance available
+
+STEPS:
+1. Terminal 1: Run `just server`
+   - Wait for "Server listening on 0.0.0.0:9000"
+
+2. Terminal 2: Run `just client`
+   - Wait for client UI to appear
+
+3. Navigate to a liquid symbol (e.g., :c BTCUSDT)
+
+4. Open a small test position:
+   - For LONG: :b 0.001 (or minimum position size)
+   - For SHORT: :s 0.001
+
+5. Run panic stop command: :ps 5
+   - This sets a 5-second inactivity timeout
+
+6. VERIFY TIMER INDICATOR:
+   [ ] Timer appears at top of trades tape
+   [ ] Shows "PS: X.Xs" format with countdown
+   [ ] Timer is yellow when active
+
+7. VERIFY TIMER RESET (if trades arrive):
+   [ ] When new trade arrives for symbol, timer resets to 5 seconds
+   [ ] Timer countdown restarts
+
+8. VERIFY TIMEOUT TRIGGER:
+   [ ] If no trades for 5 seconds, market close order executes
+   [ ] Position closes
+   [ ] Timer indicator disappears
+   [ ] Message "Panic stop triggered for {symbol}" appears
+
+EXPECTED BEHAVIOR:
+- Timer should show at top of trades tape immediately after :ps 5
+- Timer counts down from 5.0s to 0.0s
+- Every new trade for the symbol resets timer to 5.0s
+- If timer reaches 0, position is closed via market order
+
+TROUBLESHOOTING:
+- If timer doesn't appear: Check server logs for PanicStopActivated message
+- If timer doesn't reset: Check trade stream is active for the symbol
+- If position doesn't close: Check Bybit API permissions for trading
+
+=== END MANUAL TEST PROCEDURE ===
