@@ -14,7 +14,12 @@
       "description": "ClientHandler now accepts Arc<Mutex<Option<PanicStopState>>> as second parameter. PanicStop handler initializes the shared state which is monitored by the chart event task (for trade updates/timer resets) and timer task (for timeout/market close execution).",
       "category": "architecture",
       "discovered_at": "2026-01-02T03:28:06.911788+00:00"
+    },
+    "client/src/app.rs": {
+      "description": "panicStop command with alias 'ps' added to COMMANDS array at line 41",
+      "category": "command",
+      "discovered_at": "2026-01-02T03:29:21.896443+00:00"
     }
   },
-  "last_updated": "2026-01-02T03:28:06.911804+00:00"
+  "last_updated": "2026-01-02T03:29:21.896469+00:00"
 }

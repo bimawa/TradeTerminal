@@ -233,7 +233,9 @@
             "command": "cargo check -p trade-client",
             "expected": "Compiles without errors"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Added panicStop command with alias 'ps' to COMMANDS array in client/src/app.rs following the exact pattern of existing commands. Committed as b6d5cc4.",
+          "updated_at": "2026-01-02T03:29:15.773074+00:00"
         },
         {
           "id": "subtask-4-2",
@@ -252,7 +254,9 @@
             "command": "cargo check -p trade-client",
             "expected": "Compiles without errors"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Implemented set_panic_stop() async method in client/src/app.rs. Method parses timeout_secs (u32) from args[0], optional trigger_price (Decimal) from args[1], gets position side from parameter or finds from existing positions, creates PanicStopRequest with symbol/side/timeout/trigger_price, sends via ClientPayload::PanicStop, and displays confirmation message. Added PanicStopRequest to imports. Committed as ab24376.",
+          "updated_at": "2026-01-02T03:31:07.267966+00:00"
         },
         {
           "id": "subtask-4-3",
@@ -271,7 +275,9 @@
             "command": "cargo check -p trade-client",
             "expected": "Compiles without errors"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Added Some(\"panicStop\") match case to execute_single_command() switch. The handler checks for at least 2 parts (command + seconds) and calls self.set_panic_stop(&parts[1..], None).await? or shows usage message. Follows same pattern as ts command. Committed in 3253772.",
+          "updated_at": "2026-01-02T03:33:10.642582+00:00"
         },
         {
           "id": "subtask-4-4",
@@ -529,5 +535,5 @@
     }
   },
   "qa_signoff": null,
-  "last_updated": "2026-01-02T03:28:01.038425+00:00"
+  "last_updated": "2026-01-02T03:33:10.642593+00:00"
 }

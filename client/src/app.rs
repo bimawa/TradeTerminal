@@ -453,6 +453,13 @@ impl App {
                     self.messages.push("Usage: ts <trigger> <callback>".to_string());
                 }
             }
+            Some("panicStop") => {
+                if parts.len() >= 2 {
+                    self.set_panic_stop(&parts[1..], Some(pending.side)).await?;
+                } else {
+                    self.messages.push("Usage: ps <seconds> [trigger_price]".to_string());
+                }
+            }
             _ => {
                 self.execute_single_command(&pending.action).await?;
             }
