@@ -165,4 +165,92 @@ TROUBLESHOOTING:
 - If timer doesn't reset: Check trade stream is active for the symbol
 - If position doesn't close: Check Bybit API permissions for trading
 
-=== END MANUAL TEST PROCEDURE ===
+=== END MANUAL TEST PROCEDURE (subtask-6-2) ===
+
+=== SESSION 10: MANUAL E2E TEST - subtask-6-3 ===
+
+subtask-6-3: Manual E2E test - pipe chain br | ps
+- Status: REQUIRES MANUAL TESTING
+- All implementation code is complete and committed
+
+Implementation Verification (Code Review):
+✓ client/src/app.rs: Pipe parsing at lines 431-437 - stores action in pending_action
+✓ client/src/app.rs: PendingAction struct with symbol, side, action fields
+✓ client/src/app.rs: execute_pending_action() handles panicStop at lines 460-466
+✓ client/src/app.rs: Position open detection triggers pending action at lines 1092-1096
+✓ client/src/app.rs: panicStop receives side from pending action via Some(pending.side)
+
+Key Pipe Chain Flow:
+1. User enters: :br 1 0.3% | ps 2
+2. Parser splits on "|" - executes "br 1 0.3%" immediately
+3. Stores "ps 2" as pending_action with side from br (Buy)
+4. Position update handler detects new position opens
+5. Executes pending_action: set_panic_stop(&["2"], Some(Side::Buy))
+6. Panic stop activates with 2-second timeout for the new position
+
+=== MANUAL TEST PROCEDURE (PIPE CHAIN) ===
+
+PREREQUISITES:
+1. Ensure .env file has valid BYBIT_API_KEY, BYBIT_API_SECRET
+2. Set BYBIT_TESTNET=true for safe testing
+3. Have a small test balance available (>$10 USDT)
+
+STEPS:
+1. Terminal 1: Run `just server`
+   - Wait for "Server listening on 0.0.0.0:9000"
+
+2. Terminal 2: Run `just client`
+   - Wait for client UI to appear
+
+3. Navigate to chart for a liquid symbol:
+   - :ch BTCUSDT (or :ch ETHUSDT)
+   - Verify trades tape is streaming
+
+4. Run pipe chain command: :br 1 0.3% | ps 2
+   - This places a risk-based buy order with $1 risk, 0.3% stop loss
+   - After position opens, sets 2-second panic stop
+
+5. VERIFY ORDER PLACEMENT:
+   [ ] "Pending action: ps 2" message appears (or similar pending notice)
+   [ ] Buy order is placed
+   [ ] Check Orders tab for limit order
+
+6. WAIT FOR POSITION TO OPEN:
+   - For limit order: wait for fill
+   - Alternative: use :b 0.001 | ps 2 for immediate market fill
+
+7. VERIFY PANIC STOP ACTIVATION:
+   [ ] Message "Position opened, executing: ps 2" appears
+   [ ] Message "Panic stop activated for BTCUSDT (2s)" appears
+   [ ] Timer appears at top of trades tape
+   [ ] Timer shows "PS: 2.0s" and counts down
+
+8. VERIFY TIMER BEHAVIOR:
+   [ ] When new trades arrive, timer resets to 2.0s
+   [ ] Timer countdown continues from reset value
+
+9. VERIFY TIMEOUT (wait for 2 seconds of no trades):
+   [ ] Timer reaches 0.0s
+   [ ] Position closes via market order
+   [ ] Message "Panic stop triggered for BTCUSDT - market close executed" appears
+   [ ] Timer indicator disappears
+
+ALTERNATIVE QUICK TEST (Market Order):
+Run: :b 0.001 | ps 5
+- Uses market order for immediate fill
+- Gives 5 seconds before timeout (easier to observe)
+
+EXPECTED BEHAVIOR:
+1. br/sr/b/s command executes immediately
+2. ps command waits until position opens
+3. Once position fills, panic stop activates automatically
+4. Timer shows countdown in trades tape
+5. If no trade activity for timeout period, position closes
+
+TROUBLESHOOTING:
+- If pending action doesn't execute: Check server logs for position update
+- If panic stop doesn't activate: Ensure symbol matches between order and chart
+- If timer doesn't appear: Verify PanicStopActivated message in client logs
+- If position doesn't close: Check Bybit API trading permissions
+
+=== END MANUAL TEST PROCEDURE (subtask-6-3) ===
