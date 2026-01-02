@@ -1,0 +1,15 @@
+{
+  "discovered_files": {
+    "shared/src/messages.rs": {
+      "description": "ServerPayload enum uses tagged serde serialization (#[serde(tag = \"type\", content = \"data\")]). PanicStop response variants added: PanicStopActivated (timeout_secs: u32), PanicStopStatus (remaining_ms: u64, active: bool), PanicStopTriggered (symbol only).",
+      "category": "protocol",
+      "discovered_at": "2026-01-02T03:13:54.805389+00:00"
+    },
+    "server/src/server.rs": {
+      "description": "PanicStopState struct added at module level with fields: symbol (Symbol), side (Side), timeout_ms (u64), trigger_price (Option<Decimal>), last_trade_time (Instant), active (bool). Connection state maintained as Option<PanicStopState> alongside chart_subscription in handle_connection function.",
+      "category": "architecture",
+      "discovered_at": "2026-01-02T03:17:36.346694+00:00"
+    }
+  },
+  "last_updated": "2026-01-02T03:17:36.346709+00:00"
+}

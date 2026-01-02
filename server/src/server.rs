@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use trade_shared::{ClientMessage, ClientPayload, ServerMessage, ServerPayload, Side, Symbol, Trade};
@@ -93,16 +93,45 @@ async fn handle_connection(
         }
     });
 
+    let panic_stop_state: Arc<Mutex<Option<PanicStopState>>> = Arc::new(Mutex::new(None));
+    let chart_symbol: Arc<Mutex<Option<Symbol>>> = Arc::new(Mutex::new(None));
+
     let (chart_event_tx, mut chart_event_rx) = mpsc::channel::<WsEvent>(100);
     let chart_tx = tx.clone();
+    let panic_stop_for_chart = panic_stop_state.clone();
+    let chart_symbol_for_handler = chart_symbol.clone();
     tokio::spawn(async move {
         while let Some(event) = chart_event_rx.recv().await {
             let msg = match event {
                 WsEvent::TradeUpdate(data) => {
+                    let mut last_trade_price: Option<Decimal> = None;
                     if let Some(trades) = data.as_array() {
                         for trade_data in trades {
                             if let Some(trade) = parse_trade(trade_data) {
+                                last_trade_price = Some(trade.price);
                                 let _ = chart_tx.send(ServerMessage::new(ServerPayload::TradeUpdate(trade))).await;
+                            }
+                        }
+                    }
+                    if let Some(trade_price) = last_trade_price {
+                        let subscribed_symbol = chart_symbol_for_handler.lock().await.clone();
+                        let mut state_guard = panic_stop_for_chart.lock().await;
+                        if let Some(ref mut state) = *state_guard {
+                            if subscribed_symbol.as_ref() == Some(&state.symbol) {
+                                if let Some(trigger) = state.trigger_price {
+                                    let triggered = match state.side {
+                                        Side::Buy => trade_price >= trigger,
+                                        Side::Sell => trade_price <= trigger,
+                                    };
+                                    if triggered && !state.active {
+                                        state.active = true;
+                                        state.last_trade_time = Instant::now();
+                                        tracing::info!("Panic stop activated for {} at trigger price {}", state.symbol, trigger);
+                                    }
+                                }
+                                if state.active {
+                                    state.last_trade_time = Instant::now();
+                                }
                             }
                         }
                     }
@@ -132,7 +161,6 @@ async fn handle_connection(
     });
 
     let mut chart_subscription: Option<tokio::task::JoinHandle<()>> = None;
-    let mut panic_stop_state: Option<PanicStopState> = None;
 
     let write_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
@@ -153,6 +181,7 @@ async fn handle_connection(
                             if let Some(handle) = chart_subscription.take() {
                                 handle.abort();
                             }
+                            *chart_symbol.lock().await = Some(symbol.clone());
                             let ws = bybit_ws.clone();
                             let sym = symbol.0.clone();
                             let int = interval.clone();
@@ -169,6 +198,7 @@ async fn handle_connection(
                             if let Some(handle) = chart_subscription.take() {
                                 handle.abort();
                             }
+                            *chart_symbol.lock().await = None;
                             let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
                             let _ = tx.send(response).await;
                         } else {
