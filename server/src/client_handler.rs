@@ -57,6 +57,13 @@ impl ClientHandler {
                 }
             }
 
+            ClientPayload::PanicStop(req) => {
+                ServerMessage::new(ServerPayload::PanicStopActivated {
+                    symbol: req.symbol,
+                    timeout_secs: req.timeout_secs,
+                })
+            }
+
             ClientPayload::GetPositions => match self.bybit.get_positions(None).await {
                 Ok(positions) => ServerMessage::new(ServerPayload::Positions(positions)),
                 Err(e) => ServerMessage::new(ServerPayload::Error {
