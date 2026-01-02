@@ -178,7 +178,9 @@
             "command": "cargo check -p trade-server",
             "expected": "Compiles without errors"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Implemented timer tick logic in server.rs. Added tokio::select! with 100ms interval to check panic stop timeout. On each tick: sends PanicStopStatus updates for UI, checks elapsed time vs timeout_ms, executes reduce_only market order via bybit.place_order() when timeout reached, sends PanicStopTriggered notification, clears state. Also auto-activates panic stop immediately if no trigger_price is set. Build verification commands restricted - manual verification required. Committed as 2f2fc12.",
+          "updated_at": "2026-01-02T03:24:34.195249+00:00"
         },
         {
           "id": "subtask-3-4",
@@ -198,7 +200,9 @@
             "command": "cargo build -p trade-server",
             "expected": "Builds without errors"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Wired PanicStop handler to state management. ClientHandler now accepts Arc<Mutex<Option<PanicStopState>>> parameter. PanicStop handler initializes shared state with symbol, side, timeout_ms (from timeout_secs * 1000), trigger_price, last_trade_time=Instant::now(), and active=false. State is shared between handler, chart event task, and timer task. Moved panic_stop_state creation before handler creation in server.rs. Build verification commands restricted - manual verification required. Committed as d0da99b.",
+          "updated_at": "2026-01-02T03:28:01.038414+00:00"
         }
       ]
     },
@@ -525,5 +529,5 @@
     }
   },
   "qa_signoff": null,
-  "last_updated": "2026-01-02T03:20:46.728434+00:00"
+  "last_updated": "2026-01-02T03:28:01.038425+00:00"
 }

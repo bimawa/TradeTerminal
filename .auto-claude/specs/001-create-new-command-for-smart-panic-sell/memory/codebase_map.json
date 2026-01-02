@@ -9,7 +9,12 @@
       "description": "PanicStopState uses Arc<Mutex<Option<...>>> for shared state between main connection loop and chart event handler task. chart_symbol Arc<Mutex<Option<Symbol>>> tracks subscribed symbol for matching with panic stop. Timer reset logic in TradeUpdate: checks symbol match, trigger price activation (Buy >= trigger, Sell <= trigger), and resets last_trade_time when active.",
       "category": "architecture",
       "discovered_at": "2026-01-02T03:20:54.442028+00:00"
+    },
+    "server/src/client_handler.rs": {
+      "description": "ClientHandler now accepts Arc<Mutex<Option<PanicStopState>>> as second parameter. PanicStop handler initializes the shared state which is monitored by the chart event task (for trade updates/timer resets) and timer task (for timeout/market close execution).",
+      "category": "architecture",
+      "discovered_at": "2026-01-02T03:28:06.911788+00:00"
     }
   },
-  "last_updated": "2026-01-02T03:20:54.442044+00:00"
+  "last_updated": "2026-01-02T03:28:06.911804+00:00"
 }
