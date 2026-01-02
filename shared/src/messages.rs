@@ -16,6 +16,7 @@ pub enum ClientPayload {
     CancelOrder { order_id: String },
     CancelAllOrders { symbol: Option<Symbol> },
     SetTrailingStop(TrailingStopRequest),
+    PanicStop(PanicStopRequest),
     GetPositions,
     GetOrders { symbol: Option<Symbol> },
     GetAccountInfo,
