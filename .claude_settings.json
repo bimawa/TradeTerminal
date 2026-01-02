@@ -1,0 +1,34 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/**)",
+      "Write(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/**)",
+      "Edit(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/**)",
+      "Glob(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/**)",
+      "Grep(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/**)",
+      "Read(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/.auto-claude/specs/001-create-new-command-for-smart-panic-sell/**)",
+      "Write(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/.auto-claude/specs/001-create-new-command-for-smart-panic-sell/**)",
+      "Edit(/Users/bimawa/Developing/Projects/TradeTerminal/.worktrees/001-create-new-command-for-smart-panic-sell/.auto-claude/specs/001-create-new-command-for-smart-panic-sell/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)",
+      "mcp__graphiti-memory__search_nodes(*)",
+      "mcp__graphiti-memory__search_facts(*)",
+      "mcp__graphiti-memory__add_episode(*)",
+      "mcp__graphiti-memory__get_episodes(*)",
+      "mcp__graphiti-memory__get_entity_edge(*)"
+    ]
+  }
+}

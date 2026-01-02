@@ -1,0 +1,78 @@
+=== AUTO-BUILD PROGRESS ===
+
+Project: PanicStop Command - Activity-Based Market Exit
+Spec: 001-create-new-command-for-smart-panic-sell
+Started: 2026-01-02
+
+Workflow Type: feature
+Rationale: New end-to-end feature requiring changes across all three services (shared, server, client). Involves new protocol messages, server-side state management with real-time monitoring, and client-side UI additions.
+
+Session 1 (Planner):
+- Created implementation_plan.json
+- Phases: 6
+- Total subtasks: 14
+- Created init.sh
+
+Phase Summary:
+1. phase-1-shared: Shared Protocol Types
+   - 3 subtasks, depends on: []
+   - Add PanicStopRequest struct, ClientPayload variant, ServerPayload variants
+
+2. phase-2-server-handler: Server Command Handler
+   - 1 subtask, depends on: [phase-1-shared]
+   - Add PanicStop handler case in client_handler.rs
+
+3. phase-3-server-state: Server Panic Stop Monitor
+   - 4 subtasks, depends on: [phase-2-server-handler]
+   - Create PanicStopState, trade update reset, timer tick logic, wire handler
+
+4. phase-4-client-command: Client Command Parsing
+   - 5 subtasks, depends on: [phase-1-shared]
+   - Add COMMANDS entry, set_panic_stop(), execute_single_command, pipe support, response handling
+
+5. phase-5-client-ui: Client Timer UI
+   - 1 subtask, depends on: [phase-4-client-command]
+   - Add timer column to trades tape
+
+6. phase-6-integration: Integration Testing
+   - 3 subtasks, depends on: [phase-3-server-state, phase-5-client-ui]
+   - Verify build/tests, manual E2E standalone, manual E2E pipe chain
+
+Services Involved:
+- shared: Protocol messages and types (PanicStopRequest, payloads)
+- server: State management, timer logic, market order execution
+- client: Command parsing, pipe integration, UI timer indicator
+
+Files to Modify:
+- shared/src/types.rs: Add PanicStopRequest struct
+- shared/src/messages.rs: Add ClientPayload::PanicStop, ServerPayload variants
+- server/src/client_handler.rs: Add PanicStop handler
+- server/src/server.rs: Add PanicStopState, timer logic, trade update handling
+- client/src/app.rs: Add command, parsing, pipe integration, response handling
+- client/src/ui.rs: Add timer column to trades tape
+
+Parallelism Analysis:
+- Max parallel phases: 2 (phase-2/3 and phase-4 can run in parallel after phase-1)
+- Recommended workers: 1 (sequential recommended due to tight coupling)
+- Parallel groups: [phase-4-client-command] after phase-1
+
+Key Patterns Identified:
+- Command registration: client/src/app.rs:24-41 (COMMANDS array)
+- Pipe integration: client/src/app.rs:441-461 (execute_pending_action)
+- Handler pattern: server/src/client_handler.rs:48-58 (SetTrailingStop)
+- Trade updates: server/src/server.rs:86-122 (WsEvent::TradeUpdate)
+- UI pattern: client/src/ui.rs:546-577 (draw_trades_tape)
+
+=== STARTUP COMMAND ===
+
+To continue building this spec, run:
+
+  source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 001 --parallel 1
+
+Development commands:
+  just server     # Start server (terminal 1)
+  just client     # Start client (terminal 2)
+  cargo test      # Run tests
+  cargo clippy    # Lint check
+
+=== END SESSION 1 (PLANNING COMPLETE) ===

@@ -52,6 +52,9 @@ pub enum ServerPayload {
     OrderUpdate(Order),
     OrderError { message: String },
     TrailingStopSet { symbol: Symbol },
+    PanicStopActivated { symbol: Symbol, timeout_secs: u32 },
+    PanicStopStatus { symbol: Symbol, remaining_ms: u64, active: bool },
+    PanicStopTriggered { symbol: Symbol },
     Positions(Vec<Position>),
     Orders(Vec<Order>),
     AccountInfo(AccountInfo),
@@ -344,6 +347,91 @@ mod tests {
                 assert_eq!(order_id, "order-123");
             }
             _ => panic!("Expected OrderCancelled"),
+        }
+    }
+
+    #[test]
+    fn test_panic_stop_activated_payload() {
+        let payload = ServerPayload::PanicStopActivated {
+            symbol: Symbol::new("BTCUSDT"),
+            timeout_secs: 5,
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"type\":\"PanicStopActivated\""));
+        assert!(json.contains("\"symbol\":\"BTCUSDT\""));
+        assert!(json.contains("\"timeout_secs\":5"));
+
+        let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ServerPayload::PanicStopActivated { symbol, timeout_secs } => {
+                assert_eq!(symbol.0, "BTCUSDT");
+                assert_eq!(timeout_secs, 5);
+            }
+            _ => panic!("Expected PanicStopActivated"),
+        }
+    }
+
+    #[test]
+    fn test_panic_stop_status_payload() {
+        let payload = ServerPayload::PanicStopStatus {
+            symbol: Symbol::new("ETHUSDT"),
+            remaining_ms: 3500,
+            active: true,
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"type\":\"PanicStopStatus\""));
+        assert!(json.contains("\"remaining_ms\":3500"));
+        assert!(json.contains("\"active\":true"));
+
+        let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ServerPayload::PanicStopStatus { symbol, remaining_ms, active } => {
+                assert_eq!(symbol.0, "ETHUSDT");
+                assert_eq!(remaining_ms, 3500);
+                assert!(active);
+            }
+            _ => panic!("Expected PanicStopStatus"),
+        }
+    }
+
+    #[test]
+    fn test_panic_stop_status_inactive() {
+        let payload = ServerPayload::PanicStopStatus {
+            symbol: Symbol::new("BTCUSDT"),
+            remaining_ms: 0,
+            active: false,
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"active\":false"));
+
+        let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ServerPayload::PanicStopStatus { active, .. } => {
+                assert!(!active);
+            }
+            _ => panic!("Expected PanicStopStatus"),
+        }
+    }
+
+    #[test]
+    fn test_panic_stop_triggered_payload() {
+        let payload = ServerPayload::PanicStopTriggered {
+            symbol: Symbol::new("BTCUSDT"),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"type\":\"PanicStopTriggered\""));
+        assert!(json.contains("\"symbol\":\"BTCUSDT\""));
+
+        let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ServerPayload::PanicStopTriggered { symbol } => {
+                assert_eq!(symbol.0, "BTCUSDT");
+            }
+            _ => panic!("Expected PanicStopTriggered"),
         }
     }
 }
