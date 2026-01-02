@@ -3,11 +3,12 @@ use futures_util::{SinkExt, StreamExt};
 use rust_decimal::Decimal;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use trade_shared::{ClientMessage, ClientPayload, ServerMessage, ServerPayload, Side, Symbol, Trade};
+use trade_shared::{ClientMessage, ClientPayload, OrderRequest, OrderType, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
 
 pub struct PanicStopState {
     pub symbol: Symbol,
@@ -52,6 +53,7 @@ async fn handle_connection(
     let (mut write, mut read) = ws_stream.split();
 
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
+    let bybit_for_timer = bybit.clone();
     let handler = ClientHandler::new(bybit);
 
     let connected_msg = ServerMessage::new(ServerPayload::Connected);
@@ -172,52 +174,125 @@ async fn handle_connection(
         }
     });
 
-    while let Some(msg) = read.next().await {
-        match msg {
-            Ok(Message::Text(text)) => {
-                match serde_json::from_str::<ClientMessage>(&text) {
-                    Ok(client_msg) => {
-                        if let ClientPayload::SubscribeChart { ref symbol, ref interval } = client_msg.payload {
-                            if let Some(handle) = chart_subscription.take() {
-                                handle.abort();
-                            }
-                            *chart_symbol.lock().await = Some(symbol.clone());
-                            let ws = bybit_ws.clone();
-                            let sym = symbol.0.clone();
-                            let int = interval.clone();
-                            let evt_tx = chart_event_tx.clone();
-                            chart_subscription = Some(tokio::spawn(async move {
-                                tracing::info!("Starting chart subscription for {} {}", sym, int);
-                                if let Err(e) = ws.connect_chart(&sym, &int, evt_tx).await {
-                                    tracing::error!("Chart WS error: {}", e);
+    let mut timer_interval = tokio::time::interval(Duration::from_millis(100));
+    let panic_stop_for_timer = panic_stop_state.clone();
+    let tx_for_timer = tx.clone();
+
+    loop {
+        tokio::select! {
+            msg = read.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        match serde_json::from_str::<ClientMessage>(&text) {
+                            Ok(client_msg) => {
+                                if let ClientPayload::SubscribeChart { ref symbol, ref interval } = client_msg.payload {
+                                    if let Some(handle) = chart_subscription.take() {
+                                        handle.abort();
+                                    }
+                                    *chart_symbol.lock().await = Some(symbol.clone());
+                                    let ws = bybit_ws.clone();
+                                    let sym = symbol.0.clone();
+                                    let int = interval.clone();
+                                    let evt_tx = chart_event_tx.clone();
+                                    chart_subscription = Some(tokio::spawn(async move {
+                                        tracing::info!("Starting chart subscription for {} {}", sym, int);
+                                        if let Err(e) = ws.connect_chart(&sym, &int, evt_tx).await {
+                                            tracing::error!("Chart WS error: {}", e);
+                                        }
+                                    }));
+                                    let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
+                                    let _ = tx.send(response).await;
+                                } else if let ClientPayload::UnsubscribeChart = client_msg.payload {
+                                    if let Some(handle) = chart_subscription.take() {
+                                        handle.abort();
+                                    }
+                                    *chart_symbol.lock().await = None;
+                                    let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
+                                    let _ = tx.send(response).await;
+                                } else {
+                                    if let Err(e) = handler.handle(client_msg, &tx).await {
+                                        tracing::error!("Handler error: {}", e);
+                                    }
                                 }
-                            }));
-                            let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
-                            let _ = tx.send(response).await;
-                        } else if let ClientPayload::UnsubscribeChart = client_msg.payload {
-                            if let Some(handle) = chart_subscription.take() {
-                                handle.abort();
                             }
-                            *chart_symbol.lock().await = None;
-                            let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
-                            let _ = tx.send(response).await;
-                        } else {
-                            if let Err(e) = handler.handle(client_msg, &tx).await {
-                                tracing::error!("Handler error: {}", e);
+                            Err(e) => {
+                                tracing::warn!("Invalid message: {}", e);
                             }
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!("Invalid message: {}", e);
+                    Some(Ok(Message::Close(_))) => break,
+                    Some(Err(e)) => {
+                        tracing::error!("WebSocket error: {}", e);
+                        break;
+                    }
+                    None => break,
+                    _ => {}
+                }
+            }
+            _ = timer_interval.tick() => {
+                let mut state_guard = panic_stop_for_timer.lock().await;
+                if let Some(ref mut state) = *state_guard {
+                    if state.active {
+                        let elapsed = state.last_trade_time.elapsed().as_millis() as u64;
+                        let remaining_ms = state.timeout_ms.saturating_sub(elapsed);
+
+                        let status_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                            symbol: state.symbol.clone(),
+                            remaining_ms,
+                            active: true,
+                        });
+                        let _ = tx_for_timer.send(status_msg).await;
+
+                        if elapsed >= state.timeout_ms {
+                            tracing::info!("Panic stop timeout reached for {}, executing market close", state.symbol);
+
+                            let close_side = match state.side {
+                                Side::Buy => Side::Sell,
+                                Side::Sell => Side::Buy,
+                            };
+
+                            if let Ok(positions) = bybit_for_timer.get_positions(Some(&state.symbol)).await {
+                                if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.side == state.side) {
+                                    let order_req = OrderRequest {
+                                        symbol: state.symbol.clone(),
+                                        side: close_side,
+                                        order_type: OrderType::Market,
+                                        quantity: position.quantity,
+                                        price: None,
+                                        time_in_force: TimeInForce::Ioc,
+                                        reduce_only: true,
+                                        take_profit: None,
+                                        stop_loss: None,
+                                    };
+
+                                    match bybit_for_timer.place_order(&order_req).await {
+                                        Ok(_) => {
+                                            tracing::info!("Panic stop market close executed for {}", state.symbol);
+                                            let triggered_msg = ServerMessage::new(ServerPayload::PanicStopTriggered {
+                                                symbol: state.symbol.clone(),
+                                            });
+                                            let _ = tx_for_timer.send(triggered_msg).await;
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Failed to execute panic stop market close: {}", e);
+                                        }
+                                    }
+                                } else {
+                                    tracing::warn!("Position not found for panic stop: {} {:?}", state.symbol, state.side);
+                                }
+                            } else {
+                                tracing::error!("Failed to get positions for panic stop");
+                            }
+
+                            *state_guard = None;
+                        }
+                    } else if state.trigger_price.is_none() {
+                        state.active = true;
+                        state.last_trade_time = Instant::now();
+                        tracing::info!("Panic stop activated immediately for {} (no trigger price)", state.symbol);
                     }
                 }
             }
-            Ok(Message::Close(_)) => break,
-            Err(e) => {
-                tracing::error!("WebSocket error: {}", e);
-                break;
-            }
-            _ => {}
         }
     }
 

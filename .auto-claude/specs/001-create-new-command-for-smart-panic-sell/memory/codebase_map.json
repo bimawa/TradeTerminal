@@ -6,10 +6,10 @@
       "discovered_at": "2026-01-02T03:13:54.805389+00:00"
     },
     "server/src/server.rs": {
-      "description": "PanicStopState struct added at module level with fields: symbol (Symbol), side (Side), timeout_ms (u64), trigger_price (Option<Decimal>), last_trade_time (Instant), active (bool). Connection state maintained as Option<PanicStopState> alongside chart_subscription in handle_connection function.",
+      "description": "PanicStopState uses Arc<Mutex<Option<...>>> for shared state between main connection loop and chart event handler task. chart_symbol Arc<Mutex<Option<Symbol>>> tracks subscribed symbol for matching with panic stop. Timer reset logic in TradeUpdate: checks symbol match, trigger price activation (Buy >= trigger, Sell <= trigger), and resets last_trade_time when active.",
       "category": "architecture",
-      "discovered_at": "2026-01-02T03:17:36.346694+00:00"
+      "discovered_at": "2026-01-02T03:20:54.442028+00:00"
     }
   },
-  "last_updated": "2026-01-02T03:17:36.346709+00:00"
+  "last_updated": "2026-01-02T03:20:54.442044+00:00"
 }
