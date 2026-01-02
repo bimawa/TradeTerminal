@@ -5,8 +5,18 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use trade_shared::{ClientMessage, ClientPayload, ServerMessage, ServerPayload, Side, Trade};
+use trade_shared::{ClientMessage, ClientPayload, ServerMessage, ServerPayload, Side, Symbol, Trade};
+
+pub struct PanicStopState {
+    pub symbol: Symbol,
+    pub side: Side,
+    pub timeout_ms: u64,
+    pub trigger_price: Option<Decimal>,
+    pub last_trade_time: Instant,
+    pub active: bool,
+}
 
 use crate::bybit::{BybitClient, BybitWebSocket, WsEvent};
 use crate::client_handler::ClientHandler;
@@ -122,6 +132,7 @@ async fn handle_connection(
     });
 
     let mut chart_subscription: Option<tokio::task::JoinHandle<()>> = None;
+    let mut panic_stop_state: Option<PanicStopState> = None;
 
     let write_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
