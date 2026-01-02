@@ -257,6 +257,9 @@ mod tests {
             entry_price: dec!(94500),
             unrealized_pnl: dec!(50.25),
             leverage: 10,
+            take_profit: None,
+            stop_loss: None,
+            trailing_stop: None,
         };
 
         let json = serde_json::to_string(&pos).unwrap();
@@ -317,6 +320,9 @@ mod tests {
                 entry_price: dec!(94000),
                 unrealized_pnl: dec!(10),
                 leverage: 5,
+                take_profit: None,
+                stop_loss: None,
+                trailing_stop: None,
             }],
         };
 

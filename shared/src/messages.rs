@@ -286,6 +286,9 @@ mod tests {
             entry_price: dec!(94000),
             unrealized_pnl: dec!(100),
             leverage: 10,
+            take_profit: None,
+            stop_loss: None,
+            trailing_stop: None,
         }]);
 
         let json = serde_json::to_string(&payload).unwrap();
