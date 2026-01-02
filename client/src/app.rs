@@ -585,6 +585,13 @@ impl App {
                 self.sound_enabled = !self.sound_enabled;
                 self.messages.push(format!("Sound: {}", if self.sound_enabled { "ON" } else { "OFF" }));
             }
+            Some("panicStop") => {
+                if parts.len() >= 2 {
+                    self.set_panic_stop(&parts[1..], None).await?;
+                } else {
+                    self.messages.push("Usage: ps <seconds> [trigger_price]".to_string());
+                }
+            }
             _ => {
                 self.messages.push(format!("Unknown command: {}", parts[0]));
             }
