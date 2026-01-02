@@ -544,12 +544,37 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
 }
 
 fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
+    let has_panic_stop = app.panic_stop_remaining_ms.is_some();
     let available_lines = (area.height as usize).saturating_sub(2);
+    let trades_lines = if has_panic_stop {
+        available_lines.saturating_sub(1)
+    } else {
+        available_lines
+    };
 
-    let items: Vec<ListItem> = app
+    let mut items: Vec<ListItem> = Vec::new();
+
+    if let Some(remaining_ms) = app.panic_stop_remaining_ms {
+        let remaining_secs = remaining_ms as f64 / 1000.0;
+        let timer_style = if app.panic_stop_active {
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        let status_str = if app.panic_stop_active {
+            format!("PS: {:.1}s", remaining_secs)
+        } else {
+            "PS: ---".to_string()
+        };
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(status_str, timer_style),
+        ])));
+    }
+
+    let trade_items: Vec<ListItem> = app
         .trades
         .iter()
-        .take(available_lines)
+        .take(trades_lines)
         .map(|t| {
             let color = if t.side == Side::Buy {
                 Color::Green
@@ -569,6 +594,8 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
             ]))
         })
         .collect();
+
+    items.extend(trade_items);
 
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(" Trades "));
