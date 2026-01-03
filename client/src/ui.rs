@@ -182,10 +182,11 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
         Line::from("  :buyrisk <risk$> <sl> [lim] [tp%]"),
         Line::from("  :sellrisk <risk$> <sl> [lim] [tp%]"),
         Line::from("  :ts <trigger> <callback>"),
+        Line::from("  :ps <secs> [trigger]"),
         Line::from("  :cancel <id>   :cancelall"),
         Line::from(""),
         Line::from(Span::styled(" Shortcuts", Style::default().add_modifier(Modifier::BOLD))),
-        Line::from("  :b :s :br :sr :c :ca"),
+        Line::from("  :b :s :br :sr :c :ca :ps"),
         Line::from("  |=pipe  ;=chain"),
     ];
 
