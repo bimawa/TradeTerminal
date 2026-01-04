@@ -95,6 +95,16 @@ impl ClientHandler {
                 })
             }
 
+            ClientPayload::CancelPanicStop { symbol } => {
+                *self.panic_stop_state.lock().await = None;
+                tracing::info!("Panic stop cancelled for {}", symbol);
+                ServerMessage::new(ServerPayload::PanicStopStatus {
+                    symbol,
+                    remaining_ms: 0,
+                    active: false,
+                })
+            }
+
             ClientPayload::ClosePosition(req) => {
                 match self.bybit.close_position(&req.symbol, req.side).await {
                     Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),

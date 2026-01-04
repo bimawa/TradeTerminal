@@ -1171,6 +1171,15 @@ impl App {
                                 }
                             }
                         }
+                    } else if had_position && !has_position {
+                        if self.panic_stop_active || self.panic_stop_remaining_ms.is_some() {
+                            let msg = ClientMessage::new(ClientPayload::CancelPanicStop {
+                                symbol: Symbol::new(&self.symbol),
+                            });
+                            let _ = self.conn_tx.send(msg).await;
+                            self.panic_stop_active = false;
+                            self.panic_stop_remaining_ms = None;
+                        }
                     }
                 }
                 ServerPayload::TrailingStopSet { symbol } => {
