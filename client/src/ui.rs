@@ -579,18 +579,31 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
             else { 1 };
         let price_str = format!("{:.prec$}", price, prec = decimals);
 
-        let mut spans = vec![Span::raw(format!("{:>10}", price_str))];
-
-        if let Some(color) = pnl_color {
-            if let Some(pos) = current_pos {
-                let entry = pos.entry_price;
-                if (price >= entry && price <= y_max && pos.side == Side::Buy)
-                    || (price <= entry && price >= y_min && pos.side == Side::Sell)
-                {
-                    spans.push(Span::styled(" █", Style::default().fg(color)));
-                }
+        // Check if this price is in the PnL range for coloring
+        let pnl_highlight_color = if let (Some(color), Some(pos), Some(current)) = (pnl_color, current_pos, app.last_price) {
+            let entry = pos.entry_price;
+            let min_p = entry.min(current);
+            let max_p = entry.max(current);
+            // Add tolerance of half a row to ensure at least one row is highlighted
+            let row_tolerance = range / Decimal::from(available_lines.max(1) * 2);
+            if price >= min_p - row_tolerance && price <= max_p + row_tolerance {
+                Some(color)
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
+
+        // Color the price text itself if in PnL range
+        let mut spans = if let Some(color) = pnl_highlight_color {
+            vec![
+                Span::styled(format!("{:>10}", price_str), Style::default().fg(color)),
+                Span::styled(" █", Style::default().fg(color)),
+            ]
+        } else {
+            vec![Span::raw(format!("{:>10}", price_str))]
+        };
 
         if let Some(mp) = mouse_price {
             if (price - mp).abs() <= range / Decimal::from(available_lines * 2) {
