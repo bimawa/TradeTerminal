@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::protocol::MessageType;
 use crate::types::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,12 +77,91 @@ pub enum ServerPayload {
     Error { code: u32, message: String },
 }
 
+impl ClientPayload {
+    pub fn message_type(&self) -> MessageType {
+        match self {
+            Self::PlaceOrder(_) => MessageType::PlaceOrder,
+            Self::CancelOrder { .. } => MessageType::CancelOrder,
+            Self::CancelAllOrders { .. } => MessageType::CancelAllOrders,
+            Self::SetTrailingStop(_) => MessageType::SetTrailingStop,
+            Self::PanicStop(_) => MessageType::PanicStop,
+            Self::CancelPanicStop { .. } => MessageType::CancelPanicStop,
+            Self::ClosePosition(_) => MessageType::ClosePosition,
+            Self::GetPositions => MessageType::GetPositions,
+            Self::GetOrders { .. } => MessageType::GetOrders,
+            Self::GetAccountInfo => MessageType::GetAccountInfo,
+            Self::GetTicker { .. } => MessageType::GetTicker,
+            Self::GetCandles { .. } => MessageType::GetCandles,
+            Self::SubscribeChart { .. } => MessageType::SubscribeChart,
+            Self::UnsubscribeChart => MessageType::UnsubscribeChart,
+            Self::Subscribe { .. } => MessageType::Subscribe,
+            Self::Unsubscribe { .. } => MessageType::Unsubscribe,
+            Self::Ping => MessageType::Ping,
+        }
+    }
+
+    pub fn is_tcp_message(&self) -> bool {
+        self.message_type().is_tcp()
+    }
+
+    pub fn is_udp_message(&self) -> bool {
+        self.message_type().is_udp()
+    }
+}
+
 impl ClientMessage {
     pub fn new(payload: ClientPayload) -> Self {
         Self {
             id: Uuid::new_v4(),
             payload,
         }
+    }
+
+    pub fn message_type(&self) -> MessageType {
+        self.payload.message_type()
+    }
+
+    pub fn is_tcp_message(&self) -> bool {
+        self.payload.is_tcp_message()
+    }
+
+    pub fn is_udp_message(&self) -> bool {
+        self.payload.is_udp_message()
+    }
+}
+
+impl ServerPayload {
+    pub fn message_type(&self) -> MessageType {
+        match self {
+            Self::OrderPlaced(_) => MessageType::OrderPlaced,
+            Self::OrderCancelled { .. } => MessageType::OrderCancelled,
+            Self::OrderUpdate(_) => MessageType::OrderUpdate,
+            Self::OrderError { .. } => MessageType::OrderError,
+            Self::TrailingStopSet { .. } => MessageType::TrailingStopSet,
+            Self::PanicStopActivated { .. } => MessageType::PanicStopActivated,
+            Self::PanicStopStatus { .. } => MessageType::PanicStopStatus,
+            Self::PanicStopTriggered { .. } => MessageType::PanicStopTriggered,
+            Self::Positions(_) => MessageType::Positions,
+            Self::Orders(_) => MessageType::Orders,
+            Self::AccountInfo(_) => MessageType::AccountInfo,
+            Self::TickerUpdate(_) => MessageType::TickerUpdate,
+            Self::Candles(_) => MessageType::Candles,
+            Self::CandleUpdate(_) => MessageType::CandleUpdate,
+            Self::TradeUpdate(_) => MessageType::TradeUpdate,
+            Self::Connected => MessageType::Connected,
+            Self::Disconnected => MessageType::Disconnected,
+            Self::ChartSubscribed => MessageType::ChartSubscribed,
+            Self::Pong => MessageType::Pong,
+            Self::Error { .. } => MessageType::Error,
+        }
+    }
+
+    pub fn is_tcp_message(&self) -> bool {
+        self.message_type().is_tcp()
+    }
+
+    pub fn is_udp_message(&self) -> bool {
+        self.message_type().is_udp()
     }
 }
 
@@ -97,6 +177,18 @@ impl ServerMessage {
     pub fn with_request_id(mut self, request_id: Uuid) -> Self {
         self.request_id = Some(request_id);
         self
+    }
+
+    pub fn message_type(&self) -> MessageType {
+        self.payload.message_type()
+    }
+
+    pub fn is_tcp_message(&self) -> bool {
+        self.payload.is_tcp_message()
+    }
+
+    pub fn is_udp_message(&self) -> bool {
+        self.payload.is_udp_message()
     }
 }
 

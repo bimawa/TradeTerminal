@@ -487,6 +487,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-channel"
+version = "0.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.8.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
+
+[[package]]
 name = "crossterm"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3020,6 +3035,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arboard",
+ "bincode",
+ "bytes",
  "chrono",
  "crossterm",
  "dirs",
@@ -3037,6 +3054,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-tungstenite",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "trade-shared",
@@ -3051,11 +3069,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bytes",
  "chrono",
+ "crossbeam-channel",
  "dirs",
  "futures-util",
  "hex",
  "hmac",
+ "libc",
  "pem",
  "rcgen",
  "redb",
@@ -3072,6 +3093,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-tungstenite",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "trade-shared",
@@ -3083,12 +3105,15 @@ dependencies = [
 name = "trade-shared"
 version = "0.1.0"
 dependencies = [
+ "bincode",
+ "bytes",
  "chrono",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
+ "tokio",
  "uuid",
 ]
 
