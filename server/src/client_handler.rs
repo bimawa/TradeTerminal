@@ -74,16 +74,21 @@ impl ClientHandler {
             }
 
             ClientPayload::PanicStop(req) => {
+                let active = req.trigger_price.is_none();
                 let state = PanicStopState {
                     symbol: req.symbol.clone(),
                     side: req.side,
                     timeout_ms: req.timeout_secs as u64 * 1000,
                     trigger_price: req.trigger_price,
                     last_trade_time: Instant::now(),
-                    active: false,
+                    active,
                 };
                 *self.panic_stop_state.lock().await = Some(state);
-                tracing::info!("Panic stop registered for {} {:?} with {}s timeout", req.symbol, req.side, req.timeout_secs);
+                if active {
+                    tracing::info!("Panic stop activated immediately for {} {:?} with {}s timeout (no trigger)", req.symbol, req.side, req.timeout_secs);
+                } else {
+                    tracing::info!("Panic stop registered for {} {:?} with {}s timeout, trigger@{:?}", req.symbol, req.side, req.timeout_secs, req.trigger_price);
+                }
                 ServerMessage::new(ServerPayload::PanicStopActivated {
                     symbol: req.symbol,
                     timeout_secs: req.timeout_secs,

@@ -357,10 +357,6 @@ async fn handle_connection(
                                 }
                             }
                         }
-                    } else if state.trigger_price.is_none() {
-                        state.active = true;
-                        state.last_trade_time = Instant::now();
-                        tracing::info!(symbol = %state.symbol, side = ?state.side, timeout_ms = state.timeout_ms, "Panic stop activated immediately (no trigger price)");
                     }
                 }
             }
