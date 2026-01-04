@@ -207,6 +207,37 @@ impl BybitWebSocket {
         interval: &str,
         tx: mpsc::Sender<WsEvent>,
     ) -> Result<()> {
+        const BASE_DELAY_SECS: u64 = 2;
+        const MAX_DELAY_SECS: u64 = 30;
+        let mut current_delay = BASE_DELAY_SECS;
+
+        loop {
+            match self.connect_chart_once(symbol, interval, &tx).await {
+                Ok(_) => {
+                    current_delay = BASE_DELAY_SECS;
+                }
+                Err(e) => {
+                    tracing::error!("Bybit chart WebSocket connection failed for {}: {}", symbol, e);
+                }
+            }
+            let _ = tx.send(WsEvent::Disconnected).await;
+            tracing::info!(
+                "Reconnecting Bybit chart WebSocket ({} {}) in {} seconds...",
+                symbol,
+                interval,
+                current_delay
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(current_delay)).await;
+            current_delay = (current_delay * 2).min(MAX_DELAY_SECS);
+        }
+    }
+
+    async fn connect_chart_once(
+        &self,
+        symbol: &str,
+        interval: &str,
+        tx: &mpsc::Sender<WsEvent>,
+    ) -> Result<()> {
         let (ws_stream, _) = connect_async(&self.public_url).await?;
         let (mut write, mut read) = ws_stream.split();
 
@@ -224,6 +255,7 @@ impl BybitWebSocket {
             .await?;
 
         let _ = tx.send(WsEvent::Connected).await;
+        tracing::info!("Bybit chart WebSocket connected for {} {}", symbol, interval);
 
         tokio::spawn(async move {
             let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(20));
@@ -255,11 +287,11 @@ impl BybitWebSocket {
                     }
                 }
                 Ok(Message::Close(_)) => {
-                    let _ = tx.send(WsEvent::Disconnected).await;
+                    tracing::warn!("Bybit chart WebSocket closed by server");
                     break;
                 }
-                Err(_) => {
-                    let _ = tx.send(WsEvent::Disconnected).await;
+                Err(e) => {
+                    tracing::error!("Bybit chart WebSocket error: {}", e);
                     break;
                 }
                 _ => {}
