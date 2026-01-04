@@ -18,8 +18,9 @@ pub struct PanicStopState {
 use crate::bybit::{BybitClient, BybitWebSocket, WsEvent};
 use crate::client_handler::ClientHandler;
 use crate::config::Config;
+use crate::db;
 
-pub async fn run(config: Config, _db: Arc<redb::Database>) -> Result<()> {
+pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
     let listener = TcpListener::bind(&config.listen_addr)
         .await
         .context(format!("Failed to bind to {}", config.listen_addr))?;
@@ -32,8 +33,9 @@ pub async fn run(config: Config, _db: Arc<redb::Database>) -> Result<()> {
         tracing::info!("New connection from {}", addr);
         let bybit = bybit_client.clone();
         let ws = bybit_ws.clone();
+        let db_clone = db.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, bybit, ws).await {
+            if let Err(e) = handle_connection(stream, bybit, ws, db_clone).await {
                 tracing::error!(addr = %addr, error = %e, "Connection error");
             }
         });
@@ -46,6 +48,7 @@ async fn handle_connection(
     stream: TcpStream,
     bybit: Arc<BybitClient>,
     bybit_ws: Arc<BybitWebSocket>,
+    db: Arc<redb::Database>,
 ) -> Result<()> {
     let ws_stream = accept_async(stream)
         .await
@@ -54,7 +57,31 @@ async fn handle_connection(
 
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
     let bybit_for_timer = bybit.clone();
-    let panic_stop_state: Arc<Mutex<Option<PanicStopState>>> = Arc::new(Mutex::new(None));
+
+    let initial_state = match db::load_all_panic_stops(&db) {
+        Ok(states) => {
+            if let Some(persisted) = states.into_iter().next() {
+                tracing::info!(
+                    symbol = %persisted.symbol,
+                    side = ?persisted.side,
+                    active = persisted.active,
+                    "Restored panic stop state from database"
+                );
+                Some(PanicStopState {
+                    persisted,
+                    last_trade_time: Instant::now(),
+                })
+            } else {
+                None
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to load panic stop states from database");
+            None
+        }
+    };
+
+    let panic_stop_state: Arc<Mutex<Option<PanicStopState>>> = Arc::new(Mutex::new(initial_state));
     let handler = ClientHandler::new(bybit, panic_stop_state.clone());
 
     let connected_msg = ServerMessage::new(ServerPayload::Connected);
