@@ -66,3 +66,11 @@ client/     → app.rs — команды, pipe оператор, история
 - Округление qty: `round_quantity(qty, 0)` для большинства символов
 - Делать не "как проще", а как правильно — не переиспользовать payload/типы для разных целей, создавать отдельные варианты enum для разных событий
 - Каждый ServerPayload/ClientPayload должен иметь чёткое семантическое значение
+
+## Task Completion Checklist
+
+Before marking any implementation task as complete, verify:
+
+1. Run `just build` — must compile without errors
+2. Run `just lint` — clippy must pass without warnings
+3. Run `just test` — all tests must pass
