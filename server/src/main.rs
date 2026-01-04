@@ -1,8 +1,10 @@
+mod auth;
 mod bybit;
 mod client_handler;
 mod config;
 mod db;
 mod server;
+pub mod tls;
 
 use anyhow::Result;
 use std::sync::Arc;

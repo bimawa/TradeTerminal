@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod connection;
+mod tls;
 mod ui;
 
 use anyhow::Result;

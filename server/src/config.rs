@@ -6,6 +6,10 @@ pub struct Config {
     pub bybit_api_key: String,
     pub bybit_api_secret: String,
     pub bybit_testnet: bool,
+    pub tls_enabled: bool,
+    pub tls_cert_path: Option<String>,
+    pub tls_key_path: Option<String>,
+    pub auth_secret_key: Option<String>,
 }
 
 impl Config {
@@ -19,6 +23,12 @@ impl Config {
             bybit_testnet: std::env::var("BYBIT_TESTNET")
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
+            tls_enabled: std::env::var("TLS_ENABLED")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(false),
+            tls_cert_path: std::env::var("TLS_CERT_PATH").ok(),
+            tls_key_path: std::env::var("TLS_KEY_PATH").ok(),
+            auth_secret_key: std::env::var("AUTH_SECRET_KEY").ok(),
         })
     }
 

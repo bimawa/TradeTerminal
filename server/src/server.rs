@@ -4,11 +4,15 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::TcpListener;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
+use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use trade_shared::{ClientMessage, ClientPayload, OrderRequest, OrderType, PersistedPanicStopState, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
+use trade_shared::{AuthMessage, ClientMessage, ClientPayload, OrderRequest, OrderType, PersistedPanicStopState, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
+
+use crate::{auth, tls};
 
 pub struct PanicStopState {
     pub persisted: PersistedPanicStopState,
@@ -27,15 +31,42 @@ pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
     let bybit_client = Arc::new(BybitClient::new(&config));
     let bybit_ws = Arc::new(BybitWebSocket::new(&config));
 
-    tracing::info!("Server listening on {}", config.listen_addr);
+    let tls_acceptor = if config.tls_enabled {
+        let tls_config = tls::load_tls_config(
+            config.tls_cert_path.as_ref().context("TLS_CERT_PATH required when TLS_ENABLED=true")?,
+            config.tls_key_path.as_ref().context("TLS_KEY_PATH required when TLS_ENABLED=true")?,
+        )?;
+        Some(TlsAcceptor::from(Arc::new(tls_config)))
+    } else {
+        None
+    };
+
+    let auth_key = config.auth_secret_key.clone();
+
+    tracing::info!("Server listening on {} (TLS: {})", config.listen_addr, config.tls_enabled);
 
     while let Ok((stream, addr)) = listener.accept().await {
         tracing::info!("New connection from {}", addr);
         let bybit = bybit_client.clone();
         let ws = bybit_ws.clone();
         let db_clone = db.clone();
+        let acceptor = tls_acceptor.clone();
+        let auth = auth_key.clone();
+
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, bybit, ws, db_clone).await {
+            let result = if let Some(tls_acceptor) = acceptor {
+                match tls_acceptor.accept(stream).await {
+                    Ok(tls_stream) => handle_connection(tls_stream, bybit, ws, db_clone, auth).await,
+                    Err(e) => {
+                        tracing::error!(addr = %addr, error = %e, "TLS handshake failed");
+                        return;
+                    }
+                }
+            } else {
+                handle_connection(stream, bybit, ws, db_clone, auth).await
+            };
+
+            if let Err(e) = result {
                 tracing::error!(addr = %addr, error = %e, "Connection error");
             }
         });
@@ -45,15 +76,47 @@ pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
 }
 
 async fn handle_connection(
-    stream: TcpStream,
+    stream: impl AsyncRead + AsyncWrite + Unpin + Send + 'static,
     bybit: Arc<BybitClient>,
     bybit_ws: Arc<BybitWebSocket>,
     db: Arc<redb::Database>,
+    auth_key: Option<String>,
 ) -> Result<()> {
     let ws_stream = accept_async(stream)
         .await
         .context("Failed to accept WebSocket connection")?;
     let (mut write, mut read) = ws_stream.split();
+
+    if let Some(expected_key) = auth_key {
+        match tokio::time::timeout(auth::AUTH_TIMEOUT, read.next()).await {
+            Ok(Some(Ok(Message::Text(text)))) => {
+                match serde_json::from_str::<AuthMessage>(&text) {
+                    Ok(auth_msg) => {
+                        if !auth::validate_auth_key(&auth_msg.secret_key, &expected_key) {
+                            tracing::warn!("Authentication failed: invalid key");
+                            let error_msg = serde_json::to_string(&ServerMessage::new(
+                                ServerPayload::Error {
+                                    code: 401,
+                                    message: "Invalid authentication key".into(),
+                                }
+                            ))?;
+                            write.send(Message::Text(error_msg)).await?;
+                            anyhow::bail!("Authentication failed");
+                        }
+                        tracing::info!("Client authenticated successfully");
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to parse auth message");
+                        anyhow::bail!("Invalid authentication message");
+                    }
+                }
+            }
+            Ok(Some(Ok(_))) => anyhow::bail!("Expected text message for authentication"),
+            Ok(Some(Err(e))) => anyhow::bail!("WebSocket error during auth: {}", e),
+            Ok(None) => anyhow::bail!("Connection closed during authentication"),
+            Err(_) => anyhow::bail!("Authentication timeout"),
+        }
+    }
 
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
     let bybit_for_timer = bybit.clone();

@@ -40,6 +40,11 @@ pub struct TrailingStopRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthMessage {
+    pub secret_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerMessage {
     pub id: Uuid,
     pub request_id: Option<Uuid>,
