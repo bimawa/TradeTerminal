@@ -24,7 +24,7 @@ impl ClientHandler {
                 Err(e) => {
                     tracing::error!("Failed to place order for {}: {:#}", req.symbol, e);
                     ServerMessage::new(ServerPayload::OrderError {
-                        message: format!("Failed to place {} order for {}: {}", req.order_type, req.symbol, e),
+                        message: format!("Failed to place {:?} order for {}: {}", req.order_type, req.symbol, e),
                     })
                 }
             },

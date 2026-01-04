@@ -78,6 +78,7 @@ async fn handle_connection(
     });
 
     let tx_clone = tx.clone();
+    let panic_stop_for_ws = panic_stop_state.clone();
     tokio::spawn(async move {
         while let Some(event) = ws_event_rx.recv().await {
             let msg = match event {
@@ -91,8 +92,31 @@ async fn handle_connection(
                     }
                 }
                 WsEvent::PositionUpdate(data) => {
-                    match serde_json::from_value(data.clone()) {
-                        Ok(positions) => Some(ServerMessage::new(ServerPayload::Positions(positions))),
+                    match serde_json::from_value::<Vec<trade_shared::Position>>(data.clone()) {
+                        Ok(positions) => {
+                            let mut state_guard = panic_stop_for_ws.lock().await;
+                            if let Some(ref state) = *state_guard {
+                                let position_exists = positions.iter().any(|p| {
+                                    p.symbol == state.symbol && p.side == state.side && p.quantity > rust_decimal::Decimal::ZERO
+                                });
+                                if !position_exists {
+                                    tracing::info!(
+                                        symbol = %state.symbol,
+                                        side = ?state.side,
+                                        "Panic stop canceled: position closed"
+                                    );
+                                    let symbol_clone = state.symbol.clone();
+                                    *state_guard = None;
+                                    let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                                        symbol: symbol_clone,
+                                        remaining_ms: 0,
+                                        active: false,
+                                    });
+                                    let _ = tx_clone.send(cancel_msg).await;
+                                }
+                            }
+                            Some(ServerMessage::new(ServerPayload::Positions(positions)))
+                        }
                         Err(e) => {
                             tracing::warn!(error = %e, data = ?data, "Failed to parse position update");
                             None
