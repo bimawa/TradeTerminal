@@ -583,11 +583,13 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
 
         if let Some(color) = pnl_color {
             if let Some(pos) = current_pos {
-                let entry = pos.entry_price;
-                if (price >= entry && price <= y_max && pos.side == Side::Buy)
-                    || (price <= entry && price >= y_min && pos.side == Side::Sell)
-                {
-                    spans.push(Span::styled(" █", Style::default().fg(color)));
+                if let Some(current) = app.last_price {
+                    let entry = pos.entry_price;
+                    let min_p = entry.min(current);
+                    let max_p = entry.max(current);
+                    if price >= min_p && price <= max_p {
+                        spans.push(Span::styled(" █", Style::default().fg(color)));
+                    }
                 }
             }
         }
