@@ -61,6 +61,27 @@ impl BybitWebSocket {
     }
 
     pub async fn connect_private(&self, tx: mpsc::Sender<WsEvent>) -> Result<()> {
+        const BASE_DELAY_SECS: u64 = 2;
+        const MAX_DELAY_SECS: u64 = 30;
+        let mut current_delay = BASE_DELAY_SECS;
+
+        loop {
+            match self.connect_private_once(&tx).await {
+                Ok(_) => {
+                    current_delay = BASE_DELAY_SECS;
+                }
+                Err(e) => {
+                    tracing::error!("Bybit private WebSocket connection failed: {}", e);
+                }
+            }
+            let _ = tx.send(WsEvent::Disconnected).await;
+            tracing::info!("Reconnecting Bybit private WebSocket in {} seconds...", current_delay);
+            tokio::time::sleep(std::time::Duration::from_secs(current_delay)).await;
+            current_delay = (current_delay * 2).min(MAX_DELAY_SECS);
+        }
+    }
+
+    async fn connect_private_once(&self, tx: &mpsc::Sender<WsEvent>) -> Result<()> {
         let (ws_stream, _) = connect_async(&self.private_url).await?;
         let (mut write, mut read) = ws_stream.split();
 
@@ -88,8 +109,8 @@ impl BybitWebSocket {
         write.send(Message::Text(serde_json::to_string(&sub)?)).await?;
 
         let _ = tx.send(WsEvent::Connected).await;
+        tracing::info!("Bybit private WebSocket connected");
 
-        let _tx_clone = tx.clone();
         tokio::spawn(async move {
             let mut ping_interval = tokio::time::interval(std::time::Duration::from_secs(20));
             loop {
@@ -118,11 +139,11 @@ impl BybitWebSocket {
                     }
                 }
                 Ok(Message::Close(_)) => {
-                    let _ = tx.send(WsEvent::Disconnected).await;
+                    tracing::warn!("Bybit private WebSocket closed by server");
                     break;
                 }
-                Err(_) => {
-                    let _ = tx.send(WsEvent::Disconnected).await;
+                Err(e) => {
+                    tracing::error!("Bybit private WebSocket error: {}", e);
                     break;
                 }
                 _ => {}
