@@ -90,6 +90,18 @@ impl ClientHandler {
                 })
             }
 
+            ClientPayload::ClosePosition(req) => {
+                match self.bybit.close_position(&req.symbol, req.side).await {
+                    Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
+                    Err(e) => {
+                        tracing::error!("Failed to close position for {} {:?}: {:#}", req.symbol, req.side, e);
+                        ServerMessage::new(ServerPayload::OrderError {
+                            message: format!("Failed to close position for {} {:?}: {}", req.symbol, req.side, e),
+                        })
+                    }
+                }
+            }
+
             ClientPayload::GetPositions => match self.bybit.get_positions(None).await {
                 Ok(positions) => ServerMessage::new(ServerPayload::Positions(positions)),
                 Err(e) => {

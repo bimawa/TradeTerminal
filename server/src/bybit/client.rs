@@ -331,13 +331,40 @@ impl BybitClient {
         };
 
         let result: PositionListResult = self.get("/v5/position/list", &params).await?;
-        
+
         Ok(result
             .list
             .into_iter()
             .filter(|p| p.size.parse::<f64>().unwrap_or(0.0) != 0.0)
             .map(convert_position)
             .collect())
+    }
+
+    pub async fn close_position(&self, symbol: &Symbol, side: Side) -> Result<Order> {
+        let positions = self.get_positions(Some(symbol)).await?;
+        let position = positions
+            .into_iter()
+            .find(|p| p.symbol.0 == symbol.0 && p.side == side)
+            .context("Position not found")?;
+
+        let close_side = match side {
+            Side::Buy => Side::Sell,
+            Side::Sell => Side::Buy,
+        };
+
+        let req = trade_shared::OrderRequest {
+            symbol: symbol.clone(),
+            side: close_side,
+            order_type: trade_shared::OrderType::Market,
+            quantity: position.quantity,
+            price: None,
+            time_in_force: trade_shared::TimeInForce::Ioc,
+            reduce_only: true,
+            take_profit: None,
+            stop_loss: None,
+        };
+
+        self.place_order(&req).await
     }
 
     pub async fn get_ticker(&self, symbol: &Symbol) -> Result<Ticker> {

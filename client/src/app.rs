@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use tokio::sync::mpsc;
 use trade_shared::{
-    calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, Order,
+    calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, ClosePositionRequest, Order,
     OrderRequest, OrderType, PanicStopRequest, Position, RiskError, ServerMessage, ServerPayload,
     Side, Symbol, TimeInForce, Trade, TrailingStopRequest,
 };
@@ -28,6 +28,7 @@ const COMMANDS: &[Cmd] = &[
     Cmd { name: "sellrisk", aliases: &["sr"] },
     Cmd { name: "cancel", aliases: &["c"] },
     Cmd { name: "cancelall", aliases: &["ca"] },
+    Cmd { name: "close", aliases: &["cl"] },
     Cmd { name: "symbol", aliases: &["sym"] },
     Cmd { name: "positions", aliases: &["pos"] },
     Cmd { name: "orders", aliases: &["ord"] },
@@ -499,6 +500,13 @@ impl App {
             Some("cancelall") => {
                 self.cancel_all_orders().await?;
             }
+            Some("close") => {
+                if parts.len() >= 2 {
+                    self.close_position(parts[1]).await?;
+                } else {
+                    self.messages.push("Usage: close <long|short>".to_string());
+                }
+            }
             Some("symbol") => {
                 if parts.len() >= 2 {
                     self.unsubscribe_chart().await?;
@@ -813,6 +821,29 @@ impl App {
         Ok(())
     }
 
+    async fn close_position(&mut self, side_str: &str) -> Result<()> {
+        let side = match side_str.to_lowercase().as_str() {
+            "long" | "buy" => Side::Buy,
+            "short" | "sell" => Side::Sell,
+            _ => {
+                self.messages.push("Invalid side. Use 'long' or 'short'".to_string());
+                return Ok(());
+            }
+        };
+
+        let msg = ClientMessage::new(ClientPayload::ClosePosition(ClosePositionRequest {
+            symbol: Symbol::new(&self.symbol),
+            side,
+        }));
+        self.conn_tx.send(msg).await?;
+        self.messages.push(format!(
+            "Closing {} position for {}",
+            if side == Side::Buy { "LONG" } else { "SHORT" },
+            self.symbol
+        ));
+        Ok(())
+    }
+
     async fn set_trailing_stop(&mut self, args: &[&str], side: Option<Side>) -> Result<()> {
         let trigger = match parse_value(args[0]) {
             Some(v) => v,
@@ -1009,6 +1040,7 @@ impl App {
         self.messages.push("  sellrisk <risk$> <sl|sl%> [lim]- Short with risk calc".to_string());
         self.messages.push("  cancel <id>                    - Cancel order".to_string());
         self.messages.push("  cancelall                      - Cancel all orders".to_string());
+        self.messages.push("  close <long|short>             - Close position".to_string());
         self.messages.push("  symbol <sym>                   - Set symbol".to_string());
         self.messages.push("  ts <trigger> <callback>        - Set trailing stop (% or abs)".to_string());
         self.messages.push("  ps <secs> [trigger]            - Panic stop (auto-close after N sec)".to_string());

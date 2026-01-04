@@ -147,6 +147,12 @@ pub struct PanicStopRequest {
     pub trigger_price: Option<Decimal>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClosePositionRequest {
+    pub symbol: Symbol,
+    pub side: Side,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
