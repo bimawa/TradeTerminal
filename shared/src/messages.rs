@@ -54,8 +54,8 @@ pub enum ServerPayload {
     OrderUpdate(Order),
     OrderError { message: String },
     TrailingStopSet { symbol: Symbol },
-    PanicStopActivated { symbol: Symbol, timeout_secs: u32 },
-    PanicStopStatus { symbol: Symbol, remaining_ms: u64, active: bool },
+    PanicStopActivated { symbol: Symbol, timeout_secs: u32, trigger_price: Option<rust_decimal::Decimal> },
+    PanicStopStatus { symbol: Symbol, remaining_ms: u64, active: bool, trigger_price: Option<rust_decimal::Decimal> },
     PanicStopTriggered { symbol: Symbol },
     Positions(Vec<Position>),
     Orders(Vec<Order>),
@@ -370,6 +370,7 @@ mod tests {
         let payload = ServerPayload::PanicStopActivated {
             symbol: Symbol::new("BTCUSDT"),
             timeout_secs: 5,
+            trigger_price: Some(dec!(95000)),
         };
 
         let json = serde_json::to_string(&payload).unwrap();
@@ -379,9 +380,10 @@ mod tests {
 
         let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
         match parsed {
-            ServerPayload::PanicStopActivated { symbol, timeout_secs } => {
+            ServerPayload::PanicStopActivated { symbol, timeout_secs, trigger_price } => {
                 assert_eq!(symbol.0, "BTCUSDT");
                 assert_eq!(timeout_secs, 5);
+                assert_eq!(trigger_price, Some(dec!(95000)));
             }
             _ => panic!("Expected PanicStopActivated"),
         }
@@ -393,6 +395,7 @@ mod tests {
             symbol: Symbol::new("ETHUSDT"),
             remaining_ms: 3500,
             active: true,
+            trigger_price: Some(dec!(2500)),
         };
 
         let json = serde_json::to_string(&payload).unwrap();
@@ -402,10 +405,11 @@ mod tests {
 
         let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
         match parsed {
-            ServerPayload::PanicStopStatus { symbol, remaining_ms, active } => {
+            ServerPayload::PanicStopStatus { symbol, remaining_ms, active, trigger_price } => {
                 assert_eq!(symbol.0, "ETHUSDT");
                 assert_eq!(remaining_ms, 3500);
                 assert!(active);
+                assert_eq!(trigger_price, Some(dec!(2500)));
             }
             _ => panic!("Expected PanicStopStatus"),
         }
@@ -417,6 +421,7 @@ mod tests {
             symbol: Symbol::new("BTCUSDT"),
             remaining_ms: 0,
             active: false,
+            trigger_price: None,
         };
 
         let json = serde_json::to_string(&payload).unwrap();

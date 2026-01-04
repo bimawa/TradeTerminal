@@ -117,6 +117,7 @@ async fn handle_connection(
                                         symbol: symbol_clone,
                                         remaining_ms: 0,
                                         active: false,
+                                        trigger_price: None,
                                     });
                                     let _ = tx_clone.send(cancel_msg).await;
                                 }
@@ -284,6 +285,7 @@ async fn handle_connection(
                             symbol: state.symbol.clone(),
                             remaining_ms,
                             active: true,
+                            trigger_price: state.trigger_price,
                         });
                         let _ = tx_for_timer.send(status_msg).await;
 
@@ -351,6 +353,7 @@ async fn handle_connection(
                                             symbol: symbol_clone,
                                             remaining_ms: 0,
                                             active: false,
+                                            trigger_price: None,
                                         });
                                         let _ = tx_for_timer.send(cancel_msg).await;
                                     }
@@ -363,6 +366,7 @@ async fn handle_connection(
                                         symbol: symbol_clone,
                                         remaining_ms: 0,
                                         active: false,
+                                        trigger_price: None,
                                     });
                                     let _ = tx_for_timer.send(cancel_msg).await;
                                 }

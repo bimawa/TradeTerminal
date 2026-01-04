@@ -138,6 +138,7 @@ pub struct App {
     clipboard: Option<arboard::Clipboard>,
     pub panic_stop_remaining_ms: Option<u64>,
     pub panic_stop_active: bool,
+    pub panic_stop_trigger_price: Option<Decimal>,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -179,6 +180,7 @@ impl App {
             clipboard: arboard::Clipboard::new().ok(),
             panic_stop_remaining_ms: None,
             panic_stop_active: false,
+            panic_stop_trigger_price: None,
         }
     }
 
@@ -1194,10 +1196,11 @@ impl App {
                         }
                     }
                 }
-                ServerPayload::PanicStopActivated { symbol, timeout_secs } => {
+                ServerPayload::PanicStopActivated { symbol, timeout_secs, trigger_price } => {
                     self.messages.push(format!("Panic stop activated for {} ({}s)", symbol.0, timeout_secs));
                     self.panic_stop_active = true;
                     self.panic_stop_remaining_ms = Some((timeout_secs as u64) * 1000);
+                    self.panic_stop_trigger_price = trigger_price;
 
                     if let Some(pending) = self.pending_action.take() {
                         if pending.symbol == symbol.0 {
@@ -1208,14 +1211,16 @@ impl App {
                         }
                     }
                 }
-                ServerPayload::PanicStopStatus { symbol: _, remaining_ms, active } => {
+                ServerPayload::PanicStopStatus { symbol: _, remaining_ms, active, trigger_price } => {
                     self.panic_stop_active = active;
                     self.panic_stop_remaining_ms = if active { Some(remaining_ms) } else { None };
+                    self.panic_stop_trigger_price = if active { trigger_price } else { None };
                 }
                 ServerPayload::PanicStopTriggered { symbol } => {
                     self.messages.push(format!("Panic stop triggered for {} - market close executed", symbol.0));
                     self.panic_stop_active = false;
                     self.panic_stop_remaining_ms = None;
+                    self.panic_stop_trigger_price = None;
                 }
                 ServerPayload::OrderError { message } => {
                     self.messages.push(format!("Order error: {}", message));

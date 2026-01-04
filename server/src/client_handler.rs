@@ -92,6 +92,7 @@ impl ClientHandler {
                 ServerMessage::new(ServerPayload::PanicStopActivated {
                     symbol: req.symbol,
                     timeout_secs: req.timeout_secs,
+                    trigger_price: req.trigger_price,
                 })
             }
 

@@ -564,7 +564,11 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::DarkGray)
         };
         let status_str = if app.panic_stop_active {
-            format!("PS: {:.1}s", remaining_secs)
+            if let Some(trigger) = app.panic_stop_trigger_price {
+                format!("PS: {:.1}s @{:>9}", remaining_secs, trigger)
+            } else {
+                format!("PS: {:.1}s", remaining_secs)
+            }
         } else {
             "PS: ---".to_string()
         };
@@ -592,7 +596,7 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
             ListItem::new(Line::from(vec![
                 Span::raw(format!("{} ", time)),
                 Span::styled(side_str, Style::default().fg(color)),
-                Span::raw(format!(" {:.4}", t.qty)),
+                Span::raw(format!(" {:>9}", t.price)),
             ]))
         })
         .collect();
