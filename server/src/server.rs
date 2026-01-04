@@ -61,15 +61,35 @@ async fn handle_connection(
     let initial_state = match db::load_all_panic_stops(&db) {
         Ok(states) => {
             if let Some(persisted) = states.into_iter().next() {
+                let current_timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+
+                let elapsed_ms = (current_timestamp - persisted.start_timestamp).max(0) as u64;
+
+                if persisted.active && elapsed_ms >= persisted.timeout_ms {
+                    tracing::warn!(
+                        symbol = %persisted.symbol,
+                        side = ?persisted.side,
+                        "Panic stop timer expired during restart, will trigger on next tick"
+                    );
+                }
+
+                let last_trade_time = Instant::now() - Duration::from_millis(elapsed_ms.min(persisted.timeout_ms));
+
                 tracing::info!(
                     symbol = %persisted.symbol,
                     side = ?persisted.side,
                     active = persisted.active,
+                    elapsed_ms = elapsed_ms,
+                    remaining_ms = persisted.timeout_ms.saturating_sub(elapsed_ms),
                     "Restored panic stop state from database"
                 );
+
                 Some(PanicStopState {
                     persisted,
-                    last_trade_time: Instant::now(),
+                    last_trade_time,
                 })
             } else {
                 None

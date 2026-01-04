@@ -398,4 +398,26 @@ mod tests {
         assert_eq!(parsed.timeout_secs, 3);
         assert!(parsed.trigger_price.is_none());
     }
+
+    #[test]
+    fn test_persisted_panic_stop_state_serialization() {
+        let state = PersistedPanicStopState {
+            symbol: Symbol::new("BTCUSDT"),
+            side: Side::Buy,
+            timeout_ms: 5000,
+            trigger_price: Some(dec!(95000)),
+            start_timestamp: 1704384000000,
+            active: true,
+        };
+
+        let json = serde_json::to_string(&state).unwrap();
+        let parsed: PersistedPanicStopState = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.symbol.0, "BTCUSDT");
+        assert_eq!(parsed.side, Side::Buy);
+        assert_eq!(parsed.timeout_ms, 5000);
+        assert_eq!(parsed.trigger_price, Some(dec!(95000)));
+        assert_eq!(parsed.start_timestamp, 1704384000000);
+        assert!(parsed.active);
+    }
 }

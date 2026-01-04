@@ -122,3 +122,67 @@ pub fn load_all_panic_stops(db: &Database) -> Result<Vec<PersistedPanicStopState
     tracing::info!("Loaded {} panic stop states from database", states.len());
     Ok(states)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use trade_shared::{Symbol, Side};
+    use rust_decimal_macros::dec;
+
+    fn create_test_db() -> (tempfile::TempDir, Database) {
+        let dir = tempdir().unwrap();
+        std::env::set_var("DATA_DIR", dir.path());
+        let db = init_database().unwrap();
+        (dir, db)
+    }
+
+    fn create_test_state() -> PersistedPanicStopState {
+        PersistedPanicStopState {
+            symbol: Symbol::new("BTCUSDT"),
+            side: Side::Buy,
+            timeout_ms: 5000,
+            trigger_price: Some(dec!(95000)),
+            start_timestamp: 1704384000000,
+            active: true,
+        }
+    }
+
+    #[test]
+    fn test_save_panic_stop() {
+        let (_dir, db) = create_test_db();
+        let state = create_test_state();
+        assert!(save_panic_stop(&db, &state).is_ok());
+    }
+
+    #[test]
+    fn test_load_panic_stop() {
+        let (_dir, db) = create_test_db();
+        let state = create_test_state();
+        save_panic_stop(&db, &state).unwrap();
+
+        let loaded = load_panic_stop(&db, "BTCUSDT", Side::Buy).unwrap();
+        assert!(loaded.is_some());
+        let loaded = loaded.unwrap();
+        assert_eq!(loaded.symbol.0, "BTCUSDT");
+        assert_eq!(loaded.timeout_ms, 5000);
+    }
+
+    #[test]
+    fn test_delete_panic_stop() {
+        let (_dir, db) = create_test_db();
+        let state = create_test_state();
+        save_panic_stop(&db, &state).unwrap();
+        delete_panic_stop(&db, "BTCUSDT", Side::Buy).unwrap();
+
+        let loaded = load_panic_stop(&db, "BTCUSDT", Side::Buy).unwrap();
+        assert!(loaded.is_none());
+    }
+
+    #[test]
+    fn test_load_nonexistent() {
+        let (_dir, db) = create_test_db();
+        let loaded = load_panic_stop(&db, "NONEXISTENT", Side::Buy).unwrap();
+        assert!(loaded.is_none());
+    }
+}
