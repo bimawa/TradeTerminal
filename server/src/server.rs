@@ -8,15 +8,11 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use trade_shared::{ClientMessage, ClientPayload, OrderRequest, OrderType, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
+use trade_shared::{ClientMessage, ClientPayload, OrderRequest, OrderType, PersistedPanicStopState, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
 
 pub struct PanicStopState {
-    pub symbol: Symbol,
-    pub side: Side,
-    pub timeout_ms: u64,
-    pub trigger_price: Option<Decimal>,
+    pub persisted: PersistedPanicStopState,
     pub last_trade_time: Instant,
-    pub active: bool,
 }
 
 use crate::bybit::{BybitClient, BybitWebSocket, WsEvent};
@@ -97,7 +93,7 @@ async fn handle_connection(
                             let mut state_guard = panic_stop_for_ws.lock().await;
                             if let Some(ref state) = *state_guard {
                                 let matching_position = positions.iter().find(|p| {
-                                    p.symbol == state.symbol && p.side == state.side
+                                    p.symbol == state.persisted.symbol && p.side == state.persisted.side
                                 });
 
                                 let should_cancel = match matching_position {
@@ -107,11 +103,11 @@ async fn handle_connection(
 
                                 if should_cancel {
                                     tracing::info!(
-                                        symbol = %state.symbol,
-                                        side = ?state.side,
+                                        symbol = %state.persisted.symbol,
+                                        side = ?state.persisted.side,
                                         "Panic stop canceled: position closed or zeroed"
                                     );
-                                    let symbol_clone = state.symbol.clone();
+                                    let symbol_clone = state.persisted.symbol.clone();
                                     *state_guard = None;
                                     let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
                                         symbol: symbol_clone,
@@ -165,19 +161,19 @@ async fn handle_connection(
                         let subscribed_symbol = chart_symbol_for_handler.lock().await.clone();
                         let mut state_guard = panic_stop_for_chart.lock().await;
                         if let Some(ref mut state) = *state_guard {
-                            if subscribed_symbol.as_ref() == Some(&state.symbol) {
-                                if let Some(trigger) = state.trigger_price {
-                                    let triggered = match state.side {
+                            if subscribed_symbol.as_ref() == Some(&state.persisted.symbol) {
+                                if let Some(trigger) = state.persisted.trigger_price {
+                                    let triggered = match state.persisted.side {
                                         Side::Buy => trade_price >= trigger,
                                         Side::Sell => trade_price <= trigger,
                                     };
-                                    if triggered && !state.active {
-                                        state.active = true;
+                                    if triggered && !state.persisted.active {
+                                        state.persisted.active = true;
                                         state.last_trade_time = Instant::now();
-                                        tracing::info!(symbol = %state.symbol, trigger_price = %trigger, trade_price = %trade_price, side = ?state.side, "Panic stop activated at trigger price");
+                                        tracing::info!(symbol = %state.persisted.symbol, trigger_price = %trigger, trade_price = %trade_price, side = ?state.persisted.side, "Panic stop activated at trigger price");
                                     }
                                 }
-                                if state.active {
+                                if state.persisted.active {
                                     state.last_trade_time = Instant::now();
                                 }
                             }
@@ -277,30 +273,30 @@ async fn handle_connection(
             _ = timer_interval.tick() => {
                 let mut state_guard = panic_stop_for_timer.lock().await;
                 if let Some(ref mut state) = *state_guard {
-                    if state.active {
+                    if state.persisted.active {
                         let elapsed = state.last_trade_time.elapsed().as_millis() as u64;
-                        let remaining_ms = state.timeout_ms.saturating_sub(elapsed);
+                        let remaining_ms = state.persisted.timeout_ms.saturating_sub(elapsed);
 
                         let status_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
-                            symbol: state.symbol.clone(),
+                            symbol: state.persisted.symbol.clone(),
                             remaining_ms,
                             active: true,
-                            trigger_price: state.trigger_price,
+                            trigger_price: state.persisted.trigger_price,
                         });
                         let _ = tx_for_timer.send(status_msg).await;
 
-                        if elapsed >= state.timeout_ms {
-                            tracing::info!(symbol = %state.symbol, side = ?state.side, timeout_ms = state.timeout_ms, "Panic stop timeout reached, executing market close");
+                        if elapsed >= state.persisted.timeout_ms {
+                            tracing::info!(symbol = %state.persisted.symbol, side = ?state.persisted.side, timeout_ms = state.persisted.timeout_ms, "Panic stop timeout reached, executing market close");
 
 
 
-                            match bybit_for_timer.get_positions(Some(&state.symbol)).await {
+                            match bybit_for_timer.get_positions(Some(&state.persisted.symbol)).await {
                                 Ok(positions) => {
-                                    tracing::debug!(symbol = %state.symbol, side = ?state.side, positions_count = positions.len(), "Fetched positions for panic stop");
+                                    tracing::debug!(symbol = %state.persisted.symbol, side = ?state.persisted.side, positions_count = positions.len(), "Fetched positions for panic stop");
                                     for pos in &positions {
                                         tracing::debug!(pos_symbol = %pos.symbol, pos_side = ?pos.side, pos_qty = %pos.quantity, "Position details");
                                     }
-                                    if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.quantity > rust_decimal::Decimal::ZERO) {
+                                    if let Some(position) = positions.iter().find(|p| p.symbol == state.persisted.symbol && p.quantity > rust_decimal::Decimal::ZERO) {
                                         let actual_close_side = match position.side {
                                             Side::Buy => Side::Sell,
                                             Side::Sell => Side::Buy,
@@ -309,9 +305,9 @@ async fn handle_connection(
                                             Side::Buy => 1,
                                             Side::Sell => 2,
                                         };
-                                        tracing::info!(symbol = %state.symbol, original_side = ?state.side, actual_side = ?position.side, position_idx = position_idx, qty = %position.quantity, "Found position, attempting to close (side may have changed)");
+                                        tracing::info!(symbol = %state.persisted.symbol, original_side = ?state.persisted.side, actual_side = ?position.side, position_idx = position_idx, qty = %position.quantity, "Found position, attempting to close (side may have changed)");
                                         let order_req = OrderRequest {
-                                            symbol: state.symbol.clone(),
+                                            symbol: state.persisted.symbol.clone(),
                                             side: actual_close_side,
                                             order_type: OrderType::Market,
                                             quantity: position.quantity,
@@ -325,8 +321,8 @@ async fn handle_connection(
 
                                         match bybit_for_timer.place_order(&order_req).await {
                                             Ok(_) => {
-                                                tracing::info!(symbol = %state.symbol, side = ?state.side, qty = %position.quantity, "Panic stop market close executed");
-                                                let symbol_clone = state.symbol.clone();
+                                                tracing::info!(symbol = %state.persisted.symbol, side = ?state.persisted.side, qty = %position.quantity, "Panic stop market close executed");
+                                                let symbol_clone = state.persisted.symbol.clone();
                                                 *state_guard = None;
                                                 let triggered_msg = ServerMessage::new(ServerPayload::PanicStopTriggered {
                                                     symbol: symbol_clone,
@@ -334,7 +330,7 @@ async fn handle_connection(
                                                 let _ = tx_for_timer.send(triggered_msg).await;
                                             }
                                             Err(e) => {
-                                                let symbol_clone = state.symbol.clone();
+                                                let symbol_clone = state.persisted.symbol.clone();
                                                 let pos_side = position.side;
                                                 let error_string = e.to_string();
                                                 tracing::error!(symbol = %symbol_clone, actual_side = ?pos_side, error = %error_string, "Failed to execute panic stop market close");
@@ -346,8 +342,8 @@ async fn handle_connection(
                                             }
                                         }
                                     } else {
-                                        tracing::info!(symbol = %state.symbol, side = ?state.side, "Position already closed, canceling panic stop");
-                                        let symbol_clone = state.symbol.clone();
+                                        tracing::info!(symbol = %state.persisted.symbol, side = ?state.persisted.side, "Position already closed, canceling panic stop");
+                                        let symbol_clone = state.persisted.symbol.clone();
                                         *state_guard = None;
                                         let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
                                             symbol: symbol_clone,
@@ -359,8 +355,8 @@ async fn handle_connection(
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::error!(symbol = %state.symbol, error = %e, "Failed to get positions for panic stop");
-                                    let symbol_clone = state.symbol.clone();
+                                    tracing::error!(symbol = %state.persisted.symbol, error = %e, "Failed to get positions for panic stop");
+                                    let symbol_clone = state.persisted.symbol.clone();
                                     *state_guard = None;
                                     let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
                                         symbol: symbol_clone,
