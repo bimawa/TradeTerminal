@@ -74,7 +74,7 @@ struct PendingRiskOrder {
 struct PendingAction {
     symbol: String,
     side: Side,
-    action: String,
+    actions: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -434,7 +434,7 @@ impl App {
                 self.pending_action = Some(PendingAction {
                     symbol: self.symbol.clone(),
                     side,
-                    action: parts[1..].join("|"),
+                    actions: parts[1..].iter().map(|s| s.to_string()).collect(),
                 });
                 self.execute_single_command(first_cmd).await?;
                 return Ok(());
@@ -445,9 +445,22 @@ impl App {
     }
 
     async fn execute_pending_action(&mut self, pending: &PendingAction) -> Result<()> {
-        let parts: Vec<&str> = pending.action.split_whitespace().collect();
+        if pending.actions.is_empty() {
+            return Ok(());
+        }
+
+        let first_action = &pending.actions[0];
+        let parts: Vec<&str> = first_action.split_whitespace().collect();
         if parts.is_empty() {
             return Ok(());
+        }
+
+        if pending.actions.len() > 1 {
+            self.pending_action = Some(PendingAction {
+                symbol: pending.symbol.clone(),
+                side: pending.side,
+                actions: pending.actions[1..].to_vec(),
+            });
         }
 
         match match_command(parts[0]) {
@@ -466,7 +479,7 @@ impl App {
                 }
             }
             _ => {
-                self.execute_single_command(&pending.action).await?;
+                self.execute_single_command(first_action).await?;
             }
         }
 
@@ -1152,7 +1165,7 @@ impl App {
                     if !had_position && has_position {
                         if let Some(pending) = self.pending_action.take() {
                             if pending.symbol == self.symbol {
-                                self.messages.push(format!("Position opened, executing: {}", pending.action));
+                                self.messages.push(format!("Position opened, executing: {}", pending.actions.join(" | ")));
                                 if let Err(e) = self.execute_pending_action(&pending).await {
                                     self.messages.push(format!("Pending action error: {}", e));
                                 }
@@ -1162,11 +1175,29 @@ impl App {
                 }
                 ServerPayload::TrailingStopSet { symbol } => {
                     self.messages.push(format!("Trailing stop set for {}", symbol.0));
+
+                    if let Some(pending) = self.pending_action.take() {
+                        if pending.symbol == symbol.0 {
+                            self.messages.push(format!("Executing next action: {}", pending.actions.join(" | ")));
+                            if let Err(e) = self.execute_pending_action(&pending).await {
+                                self.messages.push(format!("Pending action error: {}", e));
+                            }
+                        }
+                    }
                 }
                 ServerPayload::PanicStopActivated { symbol, timeout_secs } => {
                     self.messages.push(format!("Panic stop activated for {} ({}s)", symbol.0, timeout_secs));
                     self.panic_stop_active = true;
                     self.panic_stop_remaining_ms = Some((timeout_secs as u64) * 1000);
+
+                    if let Some(pending) = self.pending_action.take() {
+                        if pending.symbol == symbol.0 {
+                            self.messages.push(format!("Executing next action: {}", pending.actions.join(" | ")));
+                            if let Err(e) = self.execute_pending_action(&pending).await {
+                                self.messages.push(format!("Pending action error: {}", e));
+                            }
+                        }
+                    }
                 }
                 ServerPayload::PanicStopStatus { symbol: _, remaining_ms, active } => {
                     self.panic_stop_active = active;

@@ -138,6 +138,7 @@ mod tests {
             reduce_only: false,
             take_profit: None,
             stop_loss: None,
+            position_idx: None,
         });
 
         let json = serde_json::to_string(&payload).unwrap();
@@ -324,6 +325,7 @@ mod tests {
             reduce_only: true,
             take_profit: None,
             stop_loss: None,
+            position_idx: None,
         }));
 
         let json = serde_json::to_string(&original).unwrap();
