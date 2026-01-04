@@ -321,7 +321,7 @@ impl BybitClient {
 
         let result: OrderListResult = self.get("/v5/order/realtime", &params).await?;
         
-        Ok(result.list.into_iter().map(|o| convert_order(o)).collect())
+        Ok(result.list.into_iter().map(convert_order).collect())
     }
 
     pub async fn get_positions(&self, symbol: Option<&Symbol>) -> Result<Vec<Position>> {
@@ -336,7 +336,7 @@ impl BybitClient {
             .list
             .into_iter()
             .filter(|p| p.size.parse::<f64>().unwrap_or(0.0) != 0.0)
-            .map(|p| convert_position(p))
+            .map(convert_position)
             .collect())
     }
 

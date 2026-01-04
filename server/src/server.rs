@@ -79,7 +79,7 @@ async fn handle_connection(
 
     let tx_clone = tx.clone();
     let panic_stop_for_ws = panic_stop_state.clone();
-    tokio::spawn(async move {
+    let ws_event_task = tokio::spawn(async move {
         while let Some(event) = ws_event_rx.recv().await {
             let msg = match event {
                 WsEvent::OrderUpdate(data) => {
@@ -126,7 +126,9 @@ async fn handle_connection(
                 _ => None,
             };
             if let Some(msg) = msg {
-                let _ = tx_clone.send(msg).await;
+                if tx_clone.send(msg).await.is_err() {
+                    break;
+                }
             }
         }
     });
@@ -137,7 +139,7 @@ async fn handle_connection(
     let chart_tx = tx.clone();
     let panic_stop_for_chart = panic_stop_state.clone();
     let chart_symbol_for_handler = chart_symbol.clone();
-    tokio::spawn(async move {
+    let chart_event_task = tokio::spawn(async move {
         while let Some(event) = chart_event_rx.recv().await {
             let msg = match event {
                 WsEvent::TradeUpdate(data) => {
@@ -146,7 +148,9 @@ async fn handle_connection(
                         for trade_data in trades {
                             if let Some(trade) = parse_trade(trade_data) {
                                 last_trade_price = Some(trade.price);
-                                let _ = chart_tx.send(ServerMessage::new(ServerPayload::TradeUpdate(trade))).await;
+                                if chart_tx.send(ServerMessage::new(ServerPayload::TradeUpdate(trade))).await.is_err() {
+                                    return;
+                                }
                             }
                         }
                     }
@@ -177,11 +181,7 @@ async fn handle_connection(
                 WsEvent::KlineUpdate(data) => {
                     if let Some(candles) = data.as_array() {
                         if let Some(candle_data) = candles.first() {
-                            if let Some(candle) = parse_candle(candle_data) {
-                                Some(ServerMessage::new(ServerPayload::CandleUpdate(candle)))
-                            } else {
-                                None
-                            }
+                            parse_candle(candle_data).map(|candle| ServerMessage::new(ServerPayload::CandleUpdate(candle)))
                         } else {
                             None
                         }
@@ -192,7 +192,9 @@ async fn handle_connection(
                 _ => None,
             };
             if let Some(msg) = msg {
-                let _ = chart_tx.send(msg).await;
+                if chart_tx.send(msg).await.is_err() {
+                    break;
+                }
             }
         }
     });
@@ -244,10 +246,8 @@ async fn handle_connection(
                                     *chart_symbol.lock().await = None;
                                     let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
                                     let _ = tx.send(response).await;
-                                } else {
-                                    if let Err(e) = handler.handle(client_msg.clone(), &tx).await {
-                                        tracing::error!(payload = ?client_msg.payload, error = %e, "Client handler error");
-                                    }
+                                } else if let Err(e) = handler.handle(client_msg.clone(), &tx).await {
+                                    tracing::error!(payload = ?client_msg.payload, error = %e, "Client handler error");
                                 }
                             }
                             Err(e) => {
@@ -365,7 +365,11 @@ async fn handle_connection(
         handle.abort();
     }
 
+    ws_event_task.abort();
+    chart_event_task.abort();
     write_task.abort();
+
+    tracing::info!("Client connection closed, all tasks cleaned up");
     Ok(())
 }
 
