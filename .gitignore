@@ -4,3 +4,4 @@
 .DS_Store
 .auto-claude/
 .worktrees/
+.claude_settings.json
