@@ -1,6 +1,7 @@
 mod bybit;
 mod client_handler;
 mod config;
+mod db;
 mod server;
 
 use anyhow::Result;
