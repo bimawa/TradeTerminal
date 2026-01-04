@@ -253,12 +253,12 @@ impl App {
                 KeyCode::Char('r') => {
                     self.refresh().await?;
                 }
-                KeyCode::Left if self.tab == Tab::Chart => {
+                KeyCode::Left | KeyCode::Char('h') if self.tab == Tab::Chart => {
                     if self.chart_offset + 10 < self.candles.len() {
                         self.chart_offset += 10;
                     }
                 }
-                KeyCode::Right if self.tab == Tab::Chart => {
+                KeyCode::Right | KeyCode::Char('l') if self.tab == Tab::Chart => {
                     self.chart_offset = self.chart_offset.saturating_sub(10);
                 }
                 KeyCode::Char('+') | KeyCode::Char('=') if self.tab == Tab::Chart => {
@@ -281,10 +281,10 @@ impl App {
                         self.chart_zoom_v -= 1;
                     }
                 }
-                KeyCode::Char('k') if self.tab == Tab::Chart => {
+                KeyCode::Char('k') | KeyCode::Up if self.tab == Tab::Chart => {
                     self.chart_offset_v += 10;
                 }
-                KeyCode::Char('j') if self.tab == Tab::Chart => {
+                KeyCode::Char('j') | KeyCode::Down if self.tab == Tab::Chart => {
                     self.chart_offset_v -= 10;
                 }
                 KeyCode::Char('0') if self.tab == Tab::Chart => {
@@ -1019,7 +1019,7 @@ impl App {
         self.messages.push("  sound                          - Toggle trade sounds".to_string());
         self.messages.push("Pipe operator: br 1 0.3% | ps 5  - Execute ps after position opens".to_string());
         self.messages.push("Chain commands: cmd1 ; cmd2      - Run sequentially".to_string());
-        self.messages.push("Chart keys: h/l=scroll, +/-=zoom, 0=reset".to_string());
+        self.messages.push("Chart keys: h/l/←/→=scroll, k/j/↑/↓=vertical, +/-=zoom, [/]=vzoom, 0=reset".to_string());
         self.messages.push("Keys: Tab=autocomplete, r=refresh, :=command, q=quit".to_string());
     }
 
