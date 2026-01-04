@@ -5,6 +5,7 @@ mod db;
 mod server;
 
 use anyhow::Result;
+use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -17,7 +18,8 @@ async fn main() -> Result<()> {
         .init();
 
     let config = config::Config::from_env()?;
+    let database = Arc::new(db::init_database()?);
     tracing::info!("Starting trade server on {}", config.listen_addr);
 
-    server::run(config).await
+    server::run(config, database).await
 }

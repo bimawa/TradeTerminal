@@ -19,7 +19,7 @@ use crate::bybit::{BybitClient, BybitWebSocket, WsEvent};
 use crate::client_handler::ClientHandler;
 use crate::config::Config;
 
-pub async fn run(config: Config) -> Result<()> {
+pub async fn run(config: Config, _db: Arc<redb::Database>) -> Result<()> {
     let listener = TcpListener::bind(&config.listen_addr)
         .await
         .context(format!("Failed to bind to {}", config.listen_addr))?;
