@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -24,7 +24,9 @@ use crate::client_handler::ClientHandler;
 use crate::config::Config;
 
 pub async fn run(config: Config) -> Result<()> {
-    let listener = TcpListener::bind(&config.listen_addr).await?;
+    let listener = TcpListener::bind(&config.listen_addr)
+        .await
+        .context(format!("Failed to bind to {}", config.listen_addr))?;
     let bybit_client = Arc::new(BybitClient::new(&config));
     let bybit_ws = Arc::new(BybitWebSocket::new(&config));
 
@@ -36,7 +38,7 @@ pub async fn run(config: Config) -> Result<()> {
         let ws = bybit_ws.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_connection(stream, bybit, ws).await {
-                tracing::error!("Connection error: {}", e);
+                tracing::error!(addr = %addr, error = %e, "Connection error");
             }
         });
     }
@@ -49,7 +51,9 @@ async fn handle_connection(
     bybit: Arc<BybitClient>,
     bybit_ws: Arc<BybitWebSocket>,
 ) -> Result<()> {
-    let ws_stream = accept_async(stream).await?;
+    let ws_stream = accept_async(stream)
+        .await
+        .context("Failed to accept WebSocket connection")?;
     let (mut write, mut read) = ws_stream.split();
 
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
@@ -58,15 +62,18 @@ async fn handle_connection(
     let handler = ClientHandler::new(bybit, panic_stop_state.clone());
 
     let connected_msg = ServerMessage::new(ServerPayload::Connected);
+    let connected_json = serde_json::to_string(&connected_msg)
+        .context("Failed to serialize Connected message")?;
     write
-        .send(Message::Text(serde_json::to_string(&connected_msg)?))
-        .await?;
+        .send(Message::Text(connected_json))
+        .await
+        .context("Failed to send Connected message")?;
 
     let (ws_event_tx, mut ws_event_rx) = mpsc::channel(100);
     let ws_clone = bybit_ws.clone();
     tokio::spawn(async move {
         if let Err(e) = ws_clone.connect_private(ws_event_tx).await {
-            tracing::error!("Bybit WS error: {}", e);
+            tracing::error!(error = %e, "Bybit private WebSocket connection failed");
         }
     });
 
@@ -75,17 +82,21 @@ async fn handle_connection(
         while let Some(event) = ws_event_rx.recv().await {
             let msg = match event {
                 WsEvent::OrderUpdate(data) => {
-                    if let Ok(orders) = serde_json::from_value(data) {
-                        Some(ServerMessage::new(ServerPayload::Orders(orders)))
-                    } else {
-                        None
+                    match serde_json::from_value(data.clone()) {
+                        Ok(orders) => Some(ServerMessage::new(ServerPayload::Orders(orders))),
+                        Err(e) => {
+                            tracing::warn!(error = %e, data = ?data, "Failed to parse order update");
+                            None
+                        }
                     }
                 }
                 WsEvent::PositionUpdate(data) => {
-                    if let Ok(positions) = serde_json::from_value(data) {
-                        Some(ServerMessage::new(ServerPayload::Positions(positions)))
-                    } else {
-                        None
+                    match serde_json::from_value(data.clone()) {
+                        Ok(positions) => Some(ServerMessage::new(ServerPayload::Positions(positions))),
+                        Err(e) => {
+                            tracing::warn!(error = %e, data = ?data, "Failed to parse position update");
+                            None
+                        }
                     }
                 }
                 _ => None,
@@ -128,7 +139,7 @@ async fn handle_connection(
                                     if triggered && !state.active {
                                         state.active = true;
                                         state.last_trade_time = Instant::now();
-                                        tracing::info!("Panic stop activated for {} at trigger price {}", state.symbol, trigger);
+                                        tracing::info!(symbol = %state.symbol, trigger_price = %trigger, trade_price = %trade_price, side = ?state.side, "Panic stop activated at trigger price");
                                     }
                                 }
                                 if state.active {
@@ -195,9 +206,9 @@ async fn handle_connection(
                                     let int = interval.clone();
                                     let evt_tx = chart_event_tx.clone();
                                     chart_subscription = Some(tokio::spawn(async move {
-                                        tracing::info!("Starting chart subscription for {} {}", sym, int);
+                                        tracing::info!(symbol = %sym, interval = %int, "Starting chart subscription");
                                         if let Err(e) = ws.connect_chart(&sym, &int, evt_tx).await {
-                                            tracing::error!("Chart WS error: {}", e);
+                                            tracing::error!(symbol = %sym, interval = %int, error = %e, "Chart WebSocket connection failed");
                                         }
                                     }));
                                     let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
@@ -210,19 +221,22 @@ async fn handle_connection(
                                     let response = ServerMessage::new(ServerPayload::ChartSubscribed).with_request_id(client_msg.id);
                                     let _ = tx.send(response).await;
                                 } else {
-                                    if let Err(e) = handler.handle(client_msg, &tx).await {
-                                        tracing::error!("Handler error: {}", e);
+                                    if let Err(e) = handler.handle(client_msg.clone(), &tx).await {
+                                        tracing::error!(payload = ?client_msg.payload, error = %e, "Client handler error");
                                     }
                                 }
                             }
                             Err(e) => {
-                                tracing::warn!("Invalid message: {}", e);
+                                tracing::warn!(error = %e, message = %text, "Failed to parse client message");
                             }
                         }
                     }
-                    Some(Ok(Message::Close(_))) => break,
+                    Some(Ok(Message::Close(frame))) => {
+                        tracing::debug!(frame = ?frame, "Client closed connection");
+                        break;
+                    }
                     Some(Err(e)) => {
-                        tracing::error!("WebSocket error: {}", e);
+                        tracing::error!(error = %e, "WebSocket read error");
                         break;
                     }
                     None => break,
@@ -244,44 +258,47 @@ async fn handle_connection(
                         let _ = tx_for_timer.send(status_msg).await;
 
                         if elapsed >= state.timeout_ms {
-                            tracing::info!("Panic stop timeout reached for {}, executing market close", state.symbol);
+                            tracing::info!(symbol = %state.symbol, side = ?state.side, timeout_ms = state.timeout_ms, "Panic stop timeout reached, executing market close");
 
                             let close_side = match state.side {
                                 Side::Buy => Side::Sell,
                                 Side::Sell => Side::Buy,
                             };
 
-                            if let Ok(positions) = bybit_for_timer.get_positions(Some(&state.symbol)).await {
-                                if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.side == state.side) {
-                                    let order_req = OrderRequest {
-                                        symbol: state.symbol.clone(),
-                                        side: close_side,
-                                        order_type: OrderType::Market,
-                                        quantity: position.quantity,
-                                        price: None,
-                                        time_in_force: TimeInForce::Ioc,
-                                        reduce_only: true,
-                                        take_profit: None,
-                                        stop_loss: None,
-                                    };
+                            match bybit_for_timer.get_positions(Some(&state.symbol)).await {
+                                Ok(positions) => {
+                                    if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.side == state.side) {
+                                        let order_req = OrderRequest {
+                                            symbol: state.symbol.clone(),
+                                            side: close_side,
+                                            order_type: OrderType::Market,
+                                            quantity: position.quantity,
+                                            price: None,
+                                            time_in_force: TimeInForce::Ioc,
+                                            reduce_only: true,
+                                            take_profit: None,
+                                            stop_loss: None,
+                                        };
 
-                                    match bybit_for_timer.place_order(&order_req).await {
-                                        Ok(_) => {
-                                            tracing::info!("Panic stop market close executed for {}", state.symbol);
-                                            let triggered_msg = ServerMessage::new(ServerPayload::PanicStopTriggered {
-                                                symbol: state.symbol.clone(),
-                                            });
-                                            let _ = tx_for_timer.send(triggered_msg).await;
+                                        match bybit_for_timer.place_order(&order_req).await {
+                                            Ok(_) => {
+                                                tracing::info!(symbol = %state.symbol, side = ?state.side, qty = %position.quantity, "Panic stop market close executed");
+                                                let triggered_msg = ServerMessage::new(ServerPayload::PanicStopTriggered {
+                                                    symbol: state.symbol.clone(),
+                                                });
+                                                let _ = tx_for_timer.send(triggered_msg).await;
+                                            }
+                                            Err(e) => {
+                                                tracing::error!(symbol = %state.symbol, side = ?state.side, error = %e, "Failed to execute panic stop market close");
+                                            }
                                         }
-                                        Err(e) => {
-                                            tracing::error!("Failed to execute panic stop market close: {}", e);
-                                        }
+                                    } else {
+                                        tracing::warn!(symbol = %state.symbol, side = ?state.side, "Position not found for panic stop");
                                     }
-                                } else {
-                                    tracing::warn!("Position not found for panic stop: {} {:?}", state.symbol, state.side);
                                 }
-                            } else {
-                                tracing::error!("Failed to get positions for panic stop");
+                                Err(e) => {
+                                    tracing::error!(symbol = %state.symbol, error = %e, "Failed to get positions for panic stop");
+                                }
                             }
 
                             *state_guard = None;
@@ -289,7 +306,7 @@ async fn handle_connection(
                     } else if state.trigger_price.is_none() {
                         state.active = true;
                         state.last_trade_time = Instant::now();
-                        tracing::info!("Panic stop activated immediately for {} (no trigger price)", state.symbol);
+                        tracing::info!(symbol = %state.symbol, side = ?state.side, timeout_ms = state.timeout_ms, "Panic stop activated immediately (no trigger price)");
                     }
                 }
             }

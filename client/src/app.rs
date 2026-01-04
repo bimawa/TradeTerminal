@@ -1074,6 +1074,10 @@ impl App {
                     self.refresh().await?;
                     self.subscribe_chart().await?;
                 }
+                ServerPayload::Disconnected => {
+                    self.connected = false;
+                    self.messages.push("Disconnected from server".to_string());
+                }
                 ServerPayload::OrderPlaced(order) => {
                     self.messages.push(format!("Order placed: {}", order.id));
                     self.refresh_orders().await?;

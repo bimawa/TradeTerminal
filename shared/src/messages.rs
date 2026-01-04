@@ -63,6 +63,7 @@ pub enum ServerPayload {
     CandleUpdate(Candle),
     TradeUpdate(Trade),
     Connected,
+    Disconnected,
     ChartSubscribed,
     Pong,
     Error { code: u32, message: String },
@@ -246,6 +247,13 @@ mod tests {
         let payload = ServerPayload::Connected;
         let json = serde_json::to_string(&payload).unwrap();
         assert_eq!(json, "{\"type\":\"Connected\"}");
+    }
+
+    #[test]
+    fn test_disconnected_payload() {
+        let payload = ServerPayload::Disconnected;
+        let json = serde_json::to_string(&payload).unwrap();
+        assert_eq!(json, "{\"type\":\"Disconnected\"}");
     }
 
     #[test]

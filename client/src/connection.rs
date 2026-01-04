@@ -2,13 +2,14 @@ use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use trade_shared::{ClientMessage, ServerMessage};
+use trade_shared::{ClientMessage, ServerMessage, ServerPayload};
 
 pub struct Connection {
     url: String,
     rx_to_ui: mpsc::Sender<ServerMessage>,
     tx_to_server: mpsc::Sender<ClientMessage>,
     rx_from_ui: mpsc::Receiver<ClientMessage>,
+    connected: bool,
 }
 
 impl Connection {
@@ -19,7 +20,13 @@ impl Connection {
             rx_to_ui,
             tx_to_server: tx,
             rx_from_ui: rx,
+            connected: false,
         }
+    }
+
+    async fn send_disconnected(&self) {
+        let msg = ServerMessage::new(ServerPayload::Disconnected);
+        let _ = self.rx_to_ui.send(msg).await;
     }
 
     pub fn sender(&self) -> mpsc::Sender<ClientMessage> {
@@ -27,12 +34,20 @@ impl Connection {
     }
 
     pub async fn run(mut self) -> Result<()> {
+        const BASE_DELAY_SECS: u64 = 2;
+        const MAX_DELAY_SECS: u64 = 30;
+        let mut current_delay = BASE_DELAY_SECS;
+
         loop {
             match self.connect().await {
-                Ok(_) => {}
+                Ok(_) => {
+                    current_delay = BASE_DELAY_SECS;
+                }
                 Err(e) => {
                     tracing::error!("Connection failed: {}", e);
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    tracing::info!("Reconnecting in {} seconds...", current_delay);
+                    tokio::time::sleep(std::time::Duration::from_secs(current_delay)).await;
+                    current_delay = (current_delay * 2).min(MAX_DELAY_SECS);
                 }
             }
         }
@@ -41,12 +56,22 @@ impl Connection {
     async fn connect(&mut self) -> Result<()> {
         let (ws_stream, _) = connect_async(&self.url).await?;
         let (mut write, mut read) = ws_stream.split();
+        self.connected = true;
 
         loop {
             tokio::select! {
                 Some(msg) = self.rx_from_ui.recv() => {
-                    let text = serde_json::to_string(&msg)?;
-                    write.send(Message::Text(text)).await?;
+                    match serde_json::to_string(&msg) {
+                        Ok(text) => {
+                            if let Err(e) = write.send(Message::Text(text)).await {
+                                tracing::error!("Failed to send message: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to serialize message: {}", e);
+                        }
+                    }
                 }
                 Some(msg) = read.next() => {
                     match msg {
@@ -60,7 +85,10 @@ impl Connection {
                                 }
                             }
                         }
-                        Ok(Message::Close(_)) => break,
+                        Ok(Message::Close(_)) => {
+                            tracing::warn!("Server closed connection");
+                            break;
+                        }
                         Err(e) => {
                             tracing::error!("WebSocket error: {}", e);
                             break;
@@ -69,6 +97,11 @@ impl Connection {
                     }
                 }
             }
+        }
+
+        if self.connected {
+            self.connected = false;
+            self.send_disconnected().await;
         }
 
         Ok(())

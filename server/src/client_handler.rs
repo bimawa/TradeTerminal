@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
@@ -21,30 +21,40 @@ impl ClientHandler {
         let response = match msg.payload {
             ClientPayload::PlaceOrder(req) => match self.bybit.place_order(&req).await {
                 Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
-                Err(e) => ServerMessage::new(ServerPayload::OrderError {
-                    message: e.to_string(),
-                }),
+                Err(e) => {
+                    tracing::error!("Failed to place order for {}: {:#}", req.symbol, e);
+                    ServerMessage::new(ServerPayload::OrderError {
+                        message: format!("Failed to place {} order for {}: {}", req.order_type, req.symbol, e),
+                    })
+                }
             },
 
             ClientPayload::CancelOrder { order_id } => {
                 match self.bybit.cancel_order(&trade_shared::Symbol::new("BTCUSDT"), &order_id).await {
                     Ok(_) => ServerMessage::new(ServerPayload::OrderCancelled { order_id }),
-                    Err(e) => ServerMessage::new(ServerPayload::Error {
-                        code: 1,
-                        message: e.to_string(),
-                    }),
+                    Err(e) => {
+                        tracing::error!("Failed to cancel order {}: {:#}", order_id, e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to cancel order {}: {}", order_id, e),
+                        })
+                    }
                 }
             }
 
             ClientPayload::CancelAllOrders { symbol } => {
+                let symbol_display = symbol.as_ref().map(|s| s.0.as_str()).unwrap_or("all symbols");
                 match self.bybit.cancel_all_orders(symbol.as_ref()).await {
                     Ok(_) => ServerMessage::new(ServerPayload::OrderCancelled {
                         order_id: "all".to_string(),
                     }),
-                    Err(e) => ServerMessage::new(ServerPayload::Error {
-                        code: 1,
-                        message: e.to_string(),
-                    }),
+                    Err(e) => {
+                        tracing::error!("Failed to cancel all orders for {}: {:#}", symbol_display, e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to cancel all orders for {}: {}", symbol_display, e),
+                        })
+                    }
                 }
             }
 
@@ -53,10 +63,13 @@ impl ClientHandler {
                     Ok(_) => ServerMessage::new(ServerPayload::TrailingStopSet {
                         symbol: req.symbol,
                     }),
-                    Err(e) => ServerMessage::new(ServerPayload::Error {
-                        code: 1,
-                        message: e.to_string(),
-                    }),
+                    Err(e) => {
+                        tracing::error!("Failed to set trailing stop for {} {:?}: {:#}", req.symbol, req.side, e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to set trailing stop for {} {:?}: {}", req.symbol, req.side, e),
+                        })
+                    }
                 }
             }
 
@@ -79,19 +92,26 @@ impl ClientHandler {
 
             ClientPayload::GetPositions => match self.bybit.get_positions(None).await {
                 Ok(positions) => ServerMessage::new(ServerPayload::Positions(positions)),
-                Err(e) => ServerMessage::new(ServerPayload::Error {
-                    code: 1,
-                    message: e.to_string(),
-                }),
+                Err(e) => {
+                    tracing::error!("Failed to get positions: {:#}", e);
+                    ServerMessage::new(ServerPayload::Error {
+                        code: 1,
+                        message: format!("Failed to get positions: {}", e),
+                    })
+                }
             },
 
             ClientPayload::GetOrders { symbol } => {
+                let symbol_display = symbol.as_ref().map(|s| s.0.as_str()).unwrap_or("all symbols");
                 match self.bybit.get_orders(symbol.as_ref()).await {
                     Ok(orders) => ServerMessage::new(ServerPayload::Orders(orders)),
-                    Err(e) => ServerMessage::new(ServerPayload::Error {
-                        code: 1,
-                        message: e.to_string(),
-                    }),
+                    Err(e) => {
+                        tracing::error!("Failed to get orders for {}: {:#}", symbol_display, e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to get orders for {}: {}", symbol_display, e),
+                        })
+                    }
                 }
             }
 
@@ -106,25 +126,24 @@ impl ClientHandler {
             ClientPayload::GetTicker { symbol } => {
                 match self.bybit.get_ticker(&symbol).await {
                     Ok(ticker) => ServerMessage::new(ServerPayload::TickerUpdate(ticker)),
-                    Err(e) => ServerMessage::new(ServerPayload::Error {
-                        code: 1,
-                        message: e.to_string(),
-                    }),
+                    Err(e) => {
+                        tracing::error!("Failed to get ticker for {}: {:#}", symbol, e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to get ticker for {}: {}", symbol, e),
+                        })
+                    }
                 }
             }
 
             ClientPayload::GetCandles { symbol, interval, limit } => {
-                tracing::info!("GetCandles request: {} {} {}", symbol.0, interval, limit);
                 match self.bybit.get_klines(&symbol, &interval, limit).await {
-                    Ok(candles) => {
-                        tracing::info!("GetCandles success: {} candles", candles.len());
-                        ServerMessage::new(ServerPayload::Candles(candles))
-                    }
+                    Ok(candles) => ServerMessage::new(ServerPayload::Candles(candles)),
                     Err(e) => {
-                        tracing::error!("GetCandles error: {}", e);
+                        tracing::error!("Failed to get candles for {} (interval={}, limit={}): {:#}", symbol, interval, limit, e);
                         ServerMessage::new(ServerPayload::Error {
                             code: 1,
-                            message: e.to_string(),
+                            message: format!("Failed to get candles for {}: {}", symbol, e),
                         })
                     }
                 }
@@ -150,7 +169,9 @@ impl ClientHandler {
         };
 
         let response = response.with_request_id(msg.id);
-        tx.send(response).await?;
+        tx.send(response)
+            .await
+            .context("Failed to send response to client")?;
         Ok(())
     }
 }
