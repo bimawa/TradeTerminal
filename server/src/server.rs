@@ -291,7 +291,7 @@ async fn handle_connection(
 
                             match bybit_for_timer.get_positions(Some(&state.symbol)).await {
                                 Ok(positions) => {
-                                    if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.side == state.side) {
+                                    if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.side == state.side && p.quantity > rust_decimal::Decimal::ZERO) {
                                         let order_req = OrderRequest {
                                             symbol: state.symbol.clone(),
                                             side: close_side,
@@ -307,25 +307,49 @@ async fn handle_connection(
                                         match bybit_for_timer.place_order(&order_req).await {
                                             Ok(_) => {
                                                 tracing::info!(symbol = %state.symbol, side = ?state.side, qty = %position.quantity, "Panic stop market close executed");
+                                                let symbol_clone = state.symbol.clone();
+                                                *state_guard = None;
                                                 let triggered_msg = ServerMessage::new(ServerPayload::PanicStopTriggered {
-                                                    symbol: state.symbol.clone(),
+                                                    symbol: symbol_clone,
                                                 });
                                                 let _ = tx_for_timer.send(triggered_msg).await;
                                             }
                                             Err(e) => {
                                                 tracing::error!(symbol = %state.symbol, side = ?state.side, error = %e, "Failed to execute panic stop market close");
+                                                let symbol_clone = state.symbol.clone();
+                                                *state_guard = None;
+                                                let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                                                    symbol: symbol_clone,
+                                                    remaining_ms: 0,
+                                                    active: false,
+                                                });
+                                                let _ = tx_for_timer.send(cancel_msg).await;
                                             }
                                         }
                                     } else {
-                                        tracing::warn!(symbol = %state.symbol, side = ?state.side, "Position not found for panic stop");
+                                        tracing::info!(symbol = %state.symbol, side = ?state.side, "Position already closed, canceling panic stop");
+                                        let symbol_clone = state.symbol.clone();
+                                        *state_guard = None;
+                                        let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                                            symbol: symbol_clone,
+                                            remaining_ms: 0,
+                                            active: false,
+                                        });
+                                        let _ = tx_for_timer.send(cancel_msg).await;
                                     }
                                 }
                                 Err(e) => {
                                     tracing::error!(symbol = %state.symbol, error = %e, "Failed to get positions for panic stop");
+                                    let symbol_clone = state.symbol.clone();
+                                    *state_guard = None;
+                                    let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                                        symbol: symbol_clone,
+                                        remaining_ms: 0,
+                                        active: false,
+                                    });
+                                    let _ = tx_for_timer.send(cancel_msg).await;
                                 }
                             }
-
-                            *state_guard = None;
                         }
                     } else if state.trigger_price.is_none() {
                         state.active = true;
