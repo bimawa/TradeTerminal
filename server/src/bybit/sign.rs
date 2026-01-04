@@ -111,7 +111,7 @@ mod tests {
     fn test_generate_signature_param_order() {
         let sig = generate_signature("mykey", "mysecret", 1704067200000, 5000, "test");
         let expected_param_str = "1704067200000mykey5000test";
-        let expected_sig = sign("mysecret", &expected_param_str);
+        let expected_sig = sign("mysecret", expected_param_str);
         assert_eq!(sig, expected_sig);
     }
 }

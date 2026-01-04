@@ -96,14 +96,20 @@ async fn handle_connection(
                         Ok(positions) => {
                             let mut state_guard = panic_stop_for_ws.lock().await;
                             if let Some(ref state) = *state_guard {
-                                let position_exists = positions.iter().any(|p| {
-                                    p.symbol == state.symbol && p.side == state.side && p.quantity > rust_decimal::Decimal::ZERO
+                                let matching_position = positions.iter().find(|p| {
+                                    p.symbol == state.symbol && p.side == state.side
                                 });
-                                if !position_exists {
+
+                                let should_cancel = match matching_position {
+                                    None => true,
+                                    Some(pos) => pos.quantity == rust_decimal::Decimal::ZERO,
+                                };
+
+                                if should_cancel {
                                     tracing::info!(
                                         symbol = %state.symbol,
                                         side = ?state.side,
-                                        "Panic stop canceled: position closed"
+                                        "Panic stop canceled: position closed or zeroed"
                                     );
                                     let symbol_clone = state.symbol.clone();
                                     *state_guard = None;
