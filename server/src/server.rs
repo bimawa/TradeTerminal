@@ -290,17 +290,27 @@ async fn handle_connection(
                         if elapsed >= state.timeout_ms {
                             tracing::info!(symbol = %state.symbol, side = ?state.side, timeout_ms = state.timeout_ms, "Panic stop timeout reached, executing market close");
 
-                            let close_side = match state.side {
-                                Side::Buy => Side::Sell,
-                                Side::Sell => Side::Buy,
-                            };
+
 
                             match bybit_for_timer.get_positions(Some(&state.symbol)).await {
                                 Ok(positions) => {
-                                    if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.side == state.side && p.quantity > rust_decimal::Decimal::ZERO) {
+                                    tracing::debug!(symbol = %state.symbol, side = ?state.side, positions_count = positions.len(), "Fetched positions for panic stop");
+                                    for pos in &positions {
+                                        tracing::debug!(pos_symbol = %pos.symbol, pos_side = ?pos.side, pos_qty = %pos.quantity, "Position details");
+                                    }
+                                    if let Some(position) = positions.iter().find(|p| p.symbol == state.symbol && p.quantity > rust_decimal::Decimal::ZERO) {
+                                        let actual_close_side = match position.side {
+                                            Side::Buy => Side::Sell,
+                                            Side::Sell => Side::Buy,
+                                        };
+                                        let position_idx = match position.side {
+                                            Side::Buy => 1,
+                                            Side::Sell => 2,
+                                        };
+                                        tracing::info!(symbol = %state.symbol, original_side = ?state.side, actual_side = ?position.side, position_idx = position_idx, qty = %position.quantity, "Found position, attempting to close (side may have changed)");
                                         let order_req = OrderRequest {
                                             symbol: state.symbol.clone(),
-                                            side: close_side,
+                                            side: actual_close_side,
                                             order_type: OrderType::Market,
                                             quantity: position.quantity,
                                             price: None,
@@ -308,6 +318,7 @@ async fn handle_connection(
                                             reduce_only: true,
                                             take_profit: None,
                                             stop_loss: None,
+                                            position_idx: Some(position_idx),
                                         };
 
                                         match bybit_for_timer.place_order(&order_req).await {
@@ -321,15 +332,15 @@ async fn handle_connection(
                                                 let _ = tx_for_timer.send(triggered_msg).await;
                                             }
                                             Err(e) => {
-                                                tracing::error!(symbol = %state.symbol, side = ?state.side, error = %e, "Failed to execute panic stop market close");
                                                 let symbol_clone = state.symbol.clone();
+                                                let pos_side = position.side;
+                                                let error_string = e.to_string();
+                                                tracing::error!(symbol = %symbol_clone, actual_side = ?pos_side, error = %error_string, "Failed to execute panic stop market close");
                                                 *state_guard = None;
-                                                let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
-                                                    symbol: symbol_clone,
-                                                    remaining_ms: 0,
-                                                    active: false,
+                                                let error_msg = ServerMessage::new(ServerPayload::OrderError {
+                                                    message: format!("Failed to close position for {} {:?}: {}", symbol_clone, pos_side, error_string),
                                                 });
-                                                let _ = tx_for_timer.send(cancel_msg).await;
+                                                let _ = tx_for_timer.send(error_msg).await;
                                             }
                                         }
                                     } else {

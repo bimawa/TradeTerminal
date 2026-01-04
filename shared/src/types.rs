@@ -69,6 +69,8 @@ pub struct OrderRequest {
     pub reduce_only: bool,
     pub take_profit: Option<Decimal>,
     pub stop_loss: Option<Decimal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position_idx: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

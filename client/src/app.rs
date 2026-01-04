@@ -502,9 +502,9 @@ impl App {
             }
             Some("close") => {
                 if parts.len() >= 2 {
-                    self.close_position(parts[1]).await?;
+                    self.close_position(Some(parts[1])).await?;
                 } else {
-                    self.messages.push("Usage: close <long|short>".to_string());
+                    self.close_position(None).await?;
                 }
             }
             Some("symbol") => {
@@ -639,6 +639,7 @@ impl App {
             reduce_only: false,
             take_profit: None,
             stop_loss: None,
+            position_idx: None,
         };
 
         let msg = ClientMessage::new(ClientPayload::PlaceOrder(req));
@@ -782,6 +783,7 @@ impl App {
             reduce_only: false,
             take_profit,
             stop_loss: Some(sl_price),
+            position_idx: None,
         };
 
         let msg = ClientMessage::new(ClientPayload::PlaceOrder(req));
@@ -821,13 +823,31 @@ impl App {
         Ok(())
     }
 
-    async fn close_position(&mut self, side_str: &str) -> Result<()> {
-        let side = match side_str.to_lowercase().as_str() {
-            "long" | "buy" => Side::Buy,
-            "short" | "sell" => Side::Sell,
-            _ => {
-                self.messages.push("Invalid side. Use 'long' or 'short'".to_string());
-                return Ok(());
+    async fn close_position(&mut self, side_str: Option<&str>) -> Result<()> {
+        let side = if let Some(s) = side_str {
+            match s.to_lowercase().as_str() {
+                "l" | "long" | "buy" => Side::Buy,
+                "s" | "short" | "sell" => Side::Sell,
+                _ => {
+                    self.messages.push("Invalid side. Use 'l' or 's'".to_string());
+                    return Ok(());
+                }
+            }
+        } else {
+            let current_positions: Vec<_> = self.positions.iter()
+                .filter(|p| p.symbol.0 == self.symbol)
+                .collect();
+
+            match current_positions.len() {
+                0 => {
+                    self.messages.push("No positions to close".to_string());
+                    return Ok(());
+                }
+                1 => current_positions[0].side,
+                _ => {
+                    self.messages.push("Multiple positions open. Specify side: cl <l|s>".to_string());
+                    return Ok(());
+                }
             }
         };
 
@@ -1040,7 +1060,7 @@ impl App {
         self.messages.push("  sellrisk <risk$> <sl|sl%> [lim]- Short with risk calc".to_string());
         self.messages.push("  cancel <id>                    - Cancel order".to_string());
         self.messages.push("  cancelall                      - Cancel all orders".to_string());
-        self.messages.push("  close <long|short>             - Close position".to_string());
+        self.messages.push("  close [l|s]                    - Close position (auto if one)".to_string());
         self.messages.push("  symbol <sym>                   - Set symbol".to_string());
         self.messages.push("  ts <trigger> <callback>        - Set trailing stop (% or abs)".to_string());
         self.messages.push("  ps <secs> [trigger]            - Panic stop (auto-close after N sec)".to_string());

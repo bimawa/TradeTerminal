@@ -252,10 +252,10 @@ impl BybitClient {
                 trade_shared::TimeInForce::Fok => "FOK".to_string(),
                 trade_shared::TimeInForce::PostOnly => "PostOnly".to_string(),
             },
-            position_idx: match req.side {
+            position_idx: req.position_idx.unwrap_or_else(|| match req.side {
                 Side::Buy => 1,
                 Side::Sell => 2,
-            },
+            }),
             reduce_only: req.reduce_only,
             take_profit: req.take_profit.map(|p| p.to_string()),
             stop_loss: req.stop_loss.map(|p| p.to_string()),
@@ -332,10 +332,19 @@ impl BybitClient {
 
         let result: PositionListResult = self.get("/v5/position/list", &params).await?;
 
+        tracing::debug!("Raw positions from Bybit: {} items", result.list.len());
+        for (i, p) in result.list.iter().enumerate() {
+            tracing::debug!("Position[{}]: symbol={} side={} size={}", i, p.symbol, p.side, p.size);
+        }
+
         Ok(result
             .list
             .into_iter()
-            .filter(|p| p.size.parse::<f64>().unwrap_or(0.0) != 0.0)
+            .filter(|p| {
+                let size = p.size.parse::<f64>().unwrap_or(0.0);
+                tracing::debug!("Filtering position: symbol={} side={} size={} -> keep={}", p.symbol, p.side, p.size, size != 0.0);
+                size != 0.0
+            })
             .map(convert_position)
             .collect())
     }
@@ -344,12 +353,21 @@ impl BybitClient {
         let positions = self.get_positions(Some(symbol)).await?;
         let position = positions
             .into_iter()
-            .find(|p| p.symbol.0 == symbol.0 && p.side == side)
-            .context("Position not found")?;
+            .find(|p| p.symbol.0 == symbol.0 && p.side == side);
+
+        let position = match position {
+            Some(p) => p,
+            None => anyhow::bail!("Position not found or already closed"),
+        };
 
         let close_side = match side {
             Side::Buy => Side::Sell,
             Side::Sell => Side::Buy,
+        };
+
+        let position_idx = match position.side {
+            Side::Buy => 1,
+            Side::Sell => 2,
         };
 
         let req = trade_shared::OrderRequest {
@@ -362,6 +380,7 @@ impl BybitClient {
             reduce_only: true,
             take_profit: None,
             stop_loss: None,
+            position_idx: Some(position_idx),
         };
 
         self.place_order(&req).await
