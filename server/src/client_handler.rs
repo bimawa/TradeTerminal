@@ -111,7 +111,12 @@ impl ClientHandler {
             }
 
             ClientPayload::CancelPanicStop { symbol } => {
-                *self.panic_stop_state.lock().await = None;
+                let mut state = self.panic_stop_state.lock().await;
+                if let Some(current_state) = state.take() {
+                    if let Err(e) = db::delete_panic_stop(&self.db, &current_state.persisted.symbol.0, current_state.persisted.side) {
+                        tracing::error!("Failed to delete panic stop state from database: {:#}", e);
+                    }
+                }
                 tracing::info!("Panic stop cancelled for {}", symbol);
                 ServerMessage::new(ServerPayload::PanicStopStatus {
                     symbol,
