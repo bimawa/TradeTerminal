@@ -81,3 +81,17 @@ pub fn load_panic_stop(
         }
     }
 }
+
+pub fn delete_panic_stop(db: &Database, symbol: &str, side: Side) -> Result<()> {
+    let key = make_key_from_parts(symbol, side);
+
+    let write_txn = db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(PANIC_STOPS)?;
+        table.remove(key.as_str())?;
+    }
+    write_txn.commit()?;
+
+    tracing::debug!("Deleted panic stop state for {}", key);
+    Ok(())
+}
