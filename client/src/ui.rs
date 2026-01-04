@@ -13,7 +13,7 @@ use trade_shared::Side;
 
 use crate::app::{App, InputMode, Tab};
 
-pub fn draw(f: &mut Frame, app: &App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -62,7 +62,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(header, area);
 }
 
-fn draw_main(f: &mut Frame, app: &App, area: Rect) {
+fn draw_main(f: &mut Frame, app: &mut App, area: Rect) {
     match app.tab {
         Tab::Orders => draw_orders(f, app, area),
         Tab::Positions => draw_positions(f, app, area),
@@ -261,7 +261,7 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(keys, chunks[2]);
 }
 
-fn draw_chart(f: &mut Frame, app: &App, area: Rect) {
+fn draw_chart(f: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -272,12 +272,13 @@ fn draw_chart(f: &mut Frame, app: &App, area: Rect) {
         .split(area);
 
     let chart_width = chunks[0].width;
+    app.chart_area = Some(chunks[0]);
     draw_candlesticks(f, app, chunks[0]);
     draw_price_scale(f, app, chunks[1], chart_width);
     draw_trades_tape(f, app, chunks[2]);
 }
 
-fn draw_candlesticks(f: &mut Frame, app: &App, area: Rect) {
+fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
     if app.candles.is_empty() {
         let msg = Paragraph::new("Loading candles...")
             .block(Block::default().borders(Borders::ALL).title(format!(
@@ -459,6 +460,38 @@ fn draw_candlesticks(f: &mut Frame, app: &App, area: Rect) {
                     });
                 }
             }
+
+            if let Some((mouse_x, mouse_y)) = app.mouse_position {
+                if mouse_x >= area.x && mouse_x < area.x + area.width
+                    && mouse_y >= area.y && mouse_y < area.y + area.height
+                {
+                    let x_in_canvas = ((mouse_x - area.x).saturating_sub(1) as f64).min((visible_count * (candle_width + 1)) as f64);
+
+                    ctx.draw(&CanvasLine {
+                        x1: x_in_canvas,
+                        y1: y_min,
+                        x2: x_in_canvas,
+                        y2: y_max,
+                        color: Color::Gray,
+                    });
+
+                    let inner_height = area.height.saturating_sub(2);
+                    let y_pos_in_chart = mouse_y.saturating_sub(area.y + 1);
+
+                    if y_pos_in_chart < inner_height {
+                        let y_ratio_f64 = y_pos_in_chart as f64 / inner_height.saturating_sub(1).max(1) as f64;
+                        let price_at_mouse = y_max - (y_max - y_min) * y_ratio_f64;
+
+                        ctx.draw(&CanvasLine {
+                            x1: 0.0,
+                            y1: price_at_mouse,
+                            x2: (visible_count * (candle_width + 1)) as f64,
+                            y2: price_at_mouse,
+                            color: Color::Gray,
+                        });
+                    }
+                }
+            }
         });
 
     f.render_widget(canvas, area);
@@ -515,11 +548,34 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
         }
     });
 
+    let mouse_price = if let Some((mouse_x, mouse_y)) = app.mouse_position {
+        if let Some(chart_area) = app.chart_area {
+            if mouse_x >= chart_area.x && mouse_x < chart_area.x + chart_area.width
+                && mouse_y >= chart_area.y && mouse_y < chart_area.y + chart_area.height
+            {
+                let inner_height = chart_area.height.saturating_sub(2);
+                let y_pos_in_chart = mouse_y.saturating_sub(chart_area.y + 1);
+                if y_pos_in_chart < inner_height {
+                    let y_ratio = Decimal::from(y_pos_in_chart) / Decimal::from(inner_height.saturating_sub(1).max(1));
+                    Some(y_max - (y_max - y_min) * y_ratio)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     for i in 0..available_lines {
         let price = y_max - range * Decimal::from(i) / Decimal::from(available_lines.saturating_sub(1).max(1));
-        
-        let decimals = if range < Decimal::from(10) { 4 } 
-            else if range < Decimal::from(100) { 2 } 
+
+        let decimals = if range < Decimal::from(10) { 4 }
+            else if range < Decimal::from(100) { 2 }
             else { 1 };
         let price_str = format!("{:.prec$}", price, prec = decimals);
 
@@ -533,6 +589,23 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
                 {
                     spans.push(Span::styled(" █", Style::default().fg(color)));
                 }
+            }
+        }
+
+        if let Some(mp) = mouse_price {
+            if (price - mp).abs() <= range / Decimal::from(available_lines * 2) {
+                let current_price = app.last_price.unwrap_or(mp);
+                let diff_percent = if !current_price.is_zero() {
+                    ((mp - current_price) / current_price) * Decimal::from(100)
+                } else {
+                    Decimal::ZERO
+                };
+                let sign = if diff_percent >= Decimal::ZERO { "+" } else { "" };
+                let price_label = format!(" {:>10} {}{:.2}%", mp.to_string(), sign, diff_percent);
+                spans = vec![Span::styled(
+                    price_label,
+                    Style::default().fg(Color::White).bg(Color::DarkGray).add_modifier(Modifier::BOLD),
+                )];
             }
         }
 

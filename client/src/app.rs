@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
 use std::fs;
@@ -139,6 +139,8 @@ pub struct App {
     pub panic_stop_remaining_ms: Option<u64>,
     pub panic_stop_active: bool,
     pub panic_stop_trigger_price: Option<Decimal>,
+    pub mouse_position: Option<(u16, u16)>,
+    pub chart_area: Option<ratatui::layout::Rect>,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -181,6 +183,8 @@ impl App {
             panic_stop_remaining_ms: None,
             panic_stop_active: false,
             panic_stop_trigger_price: None,
+            mouse_position: None,
+            chart_area: None,
         }
     }
 
@@ -406,6 +410,91 @@ impl App {
             },
         }
         Ok(())
+    }
+
+    pub async fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<()> {
+        if self.tab != Tab::Chart {
+            return Ok(());
+        }
+
+        match mouse.kind {
+            MouseEventKind::Moved | MouseEventKind::Drag(_) => {
+                self.mouse_position = Some((mouse.column, mouse.row));
+            }
+            MouseEventKind::Down(_) => {
+                if let Some(chart_area) = self.chart_area {
+                    if mouse.column >= chart_area.x
+                        && mouse.column < chart_area.x + chart_area.width
+                        && mouse.row >= chart_area.y
+                        && mouse.row < chart_area.y + chart_area.height
+                    {
+                        if let Some(price) = self.get_price_at_mouse(mouse.column, mouse.row) {
+                            if let Some(ref mut cb) = self.clipboard {
+                                let price_str = price.to_string();
+                                if cb.set_text(price_str.clone()).is_ok() {
+                                    self.messages.push(format!("Copied: {}", price_str));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn get_price_at_mouse(&self, col: u16, row: u16) -> Option<Decimal> {
+        let chart_area = self.chart_area?;
+
+        if col < chart_area.x || col >= chart_area.x + chart_area.width
+            || row < chart_area.y || row >= chart_area.y + chart_area.height {
+            return None;
+        }
+
+        if self.candles.is_empty() {
+            return None;
+        }
+
+        let candle_width = self.chart_zoom as usize;
+        let visible_count = (chart_area.width as usize).saturating_sub(2) / (candle_width + 1);
+        let start_idx = self.candles.len().saturating_sub(visible_count + self.chart_offset);
+        let end_idx = self.candles.len().saturating_sub(self.chart_offset);
+        let visible_candles = &self.candles[start_idx..end_idx];
+
+        if visible_candles.is_empty() {
+            return None;
+        }
+
+        let (min_price, max_price) = visible_candles.iter().fold(
+            (Decimal::MAX, Decimal::MIN),
+            |(min, max), c| (min.min(c.low), max.max(c.high)),
+        );
+
+        let base_padding = (max_price - min_price) * Decimal::from_str_exact("0.05").unwrap_or(Decimal::ZERO);
+        let zoom_factor = Decimal::from(self.chart_zoom_v);
+        let range = max_price - min_price;
+        let center = min_price + range / Decimal::from(2);
+        let half_range = (range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
+
+        let tick_size = range / Decimal::from(100);
+        let v_offset = tick_size * Decimal::from(self.chart_offset_v);
+        let adjusted_center = center + v_offset;
+
+        let y_min = adjusted_center - half_range;
+        let y_max = adjusted_center + half_range;
+
+        let inner_height = chart_area.height.saturating_sub(2);
+        let y_pos_in_chart = row.saturating_sub(chart_area.y + 1);
+
+        if y_pos_in_chart >= inner_height {
+            return None;
+        }
+
+        let y_ratio = Decimal::from(y_pos_in_chart) / Decimal::from(inner_height.saturating_sub(1).max(1));
+        let price = y_max - (y_max - y_min) * y_ratio;
+
+        Some(price)
     }
 
     async fn execute_command(&mut self, cmd: &str) -> Result<()> {

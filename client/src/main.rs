@@ -60,17 +60,23 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
     let refresh_interval = std::time::Duration::from_secs(1);
 
     loop {
-        terminal.draw(|f| ui::draw(f, &app))?;
+        terminal.draw(|f| ui::draw(f, &mut app))?;
 
         if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    return Ok(());
+            match event::read()? {
+                Event::Key(key) => {
+                    if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                        return Ok(());
+                    }
+                    if key.code == KeyCode::Char('q') && !app.is_input_mode() {
+                        return Ok(());
+                    }
+                    app.handle_key(key).await?;
                 }
-                if key.code == KeyCode::Char('q') && !app.is_input_mode() {
-                    return Ok(());
+                Event::Mouse(mouse) => {
+                    app.handle_mouse(mouse).await?;
                 }
-                app.handle_key(key).await?;
+                _ => {}
             }
         }
 

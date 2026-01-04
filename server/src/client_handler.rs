@@ -103,6 +103,7 @@ impl ClientHandler {
                     symbol,
                     remaining_ms: 0,
                     active: false,
+                    trigger_price: None,
                 })
             }
 
