@@ -95,3 +95,30 @@ pub fn delete_panic_stop(db: &Database, symbol: &str, side: Side) -> Result<()> 
     tracing::debug!("Deleted panic stop state for {}", key);
     Ok(())
 }
+
+pub fn load_all_panic_stops(db: &Database) -> Result<Vec<PersistedPanicStopState>> {
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(PANIC_STOPS)?;
+
+    let mut states = Vec::new();
+
+    for entry in table.iter()? {
+        let (key, value) = entry?;
+        match bincode::deserialize::<PersistedPanicStopState>(value.value()) {
+            Ok(state) => {
+                tracing::debug!("Loaded panic stop state for {}", key.value());
+                states.push(state);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to deserialize panic stop state for {}: {}",
+                    key.value(),
+                    e
+                );
+            }
+        }
+    }
+
+    tracing::info!("Loaded {} panic stop states from database", states.len());
+    Ok(states)
+}
