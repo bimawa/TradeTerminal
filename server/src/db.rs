@@ -6,7 +6,7 @@ use trade_shared::{PersistedPanicStopState, Side};
 pub const PANIC_STOPS: TableDefinition<&str, &[u8]> = TableDefinition::new("panic_stops");
 
 fn make_key(state: &PersistedPanicStopState) -> String {
-    make_key_from_parts(&state.symbol, state.side)
+    make_key_from_parts(&state.symbol.0, state.side)
 }
 
 fn make_key_from_parts(symbol: &str, side: Side) -> String {
