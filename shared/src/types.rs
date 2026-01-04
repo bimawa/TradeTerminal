@@ -2,6 +2,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
 pub struct Symbol(pub String);
 
 impl Symbol {

@@ -252,7 +252,7 @@ impl BybitClient {
                 trade_shared::TimeInForce::Fok => "FOK".to_string(),
                 trade_shared::TimeInForce::PostOnly => "PostOnly".to_string(),
             },
-            position_idx: req.position_idx.unwrap_or_else(|| match req.side {
+            position_idx: req.position_idx.unwrap_or(match req.side {
                 Side::Buy => 1,
                 Side::Sell => 2,
             }),

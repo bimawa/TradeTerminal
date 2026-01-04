@@ -1262,8 +1262,8 @@ impl App {
                                 }
                             }
                         }
-                    } else if had_position && !has_position {
-                        if self.panic_stop_active || self.panic_stop_remaining_ms.is_some() {
+                    } else if had_position && !has_position
+                        && (self.panic_stop_active || self.panic_stop_remaining_ms.is_some()) {
                             let msg = ClientMessage::new(ClientPayload::CancelPanicStop {
                                 symbol: Symbol::new(&self.symbol),
                             });
@@ -1271,7 +1271,6 @@ impl App {
                             self.panic_stop_active = false;
                             self.panic_stop_remaining_ms = None;
                         }
-                    }
                 }
                 ServerPayload::TrailingStopSet { symbol } => {
                     self.messages.push(format!("Trailing stop set for {}", symbol.0));

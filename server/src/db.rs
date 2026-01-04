@@ -58,6 +58,7 @@ pub fn save_panic_stop(db: &Database, state: &PersistedPanicStopState) -> Result
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn load_panic_stop(
     db: &Database,
     symbol: &str,
