@@ -150,6 +150,16 @@ pub struct PanicStopRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedPanicStopState {
+    pub symbol: Symbol,
+    pub side: Side,
+    pub timeout_ms: u64,
+    pub trigger_price: Option<Decimal>,
+    pub start_timestamp: i64,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClosePositionRequest {
     pub symbol: Symbol,
     pub side: Side,
