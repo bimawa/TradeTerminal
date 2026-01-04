@@ -587,7 +587,9 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
                     let entry = pos.entry_price;
                     let min_p = entry.min(current);
                     let max_p = entry.max(current);
-                    if price >= min_p && price <= max_p {
+                    // Add tolerance of half a row to ensure at least one row is highlighted
+                    let row_tolerance = range / Decimal::from(available_lines.max(1) * 2);
+                    if price >= min_p - row_tolerance && price <= max_p + row_tolerance {
                         spans.push(Span::styled(" █", Style::default().fg(color)));
                     }
                 }
