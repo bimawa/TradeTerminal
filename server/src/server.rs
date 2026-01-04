@@ -82,7 +82,7 @@ async fn handle_connection(
     };
 
     let panic_stop_state: Arc<Mutex<Option<PanicStopState>>> = Arc::new(Mutex::new(initial_state));
-    let handler = ClientHandler::new(bybit, panic_stop_state.clone());
+    let handler = ClientHandler::new(bybit, panic_stop_state.clone(), db.clone());
 
     let connected_msg = ServerMessage::new(ServerPayload::Connected);
     let connected_json = serde_json::to_string(&connected_msg)

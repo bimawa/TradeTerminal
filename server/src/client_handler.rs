@@ -1,20 +1,23 @@
 use anyhow::{Context, Result};
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
-use trade_shared::{ClientMessage, ClientPayload, ServerMessage, ServerPayload};
+use trade_shared::{ClientMessage, ClientPayload, PersistedPanicStopState, ServerMessage, ServerPayload};
 
 use crate::bybit::BybitClient;
+use crate::db;
 use crate::server::PanicStopState;
 
 pub struct ClientHandler {
     bybit: Arc<BybitClient>,
     panic_stop_state: Arc<Mutex<Option<PanicStopState>>>,
+    db: Arc<redb::Database>,
 }
 
 impl ClientHandler {
-    pub fn new(bybit: Arc<BybitClient>, panic_stop_state: Arc<Mutex<Option<PanicStopState>>>) -> Self {
-        Self { bybit, panic_stop_state }
+    pub fn new(bybit: Arc<BybitClient>, panic_stop_state: Arc<Mutex<Option<PanicStopState>>>, db: Arc<redb::Database>) -> Self {
+        Self { bybit, panic_stop_state, db }
     }
 
     pub async fn handle(&self, msg: ClientMessage, tx: &mpsc::Sender<ServerMessage>) -> Result<()> {
@@ -75,13 +78,24 @@ impl ClientHandler {
 
             ClientPayload::PanicStop(req) => {
                 let active = req.trigger_price.is_none();
-                let state = PanicStopState {
+                let start_timestamp = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+                let persisted = PersistedPanicStopState {
                     symbol: req.symbol.clone(),
                     side: req.side,
                     timeout_ms: req.timeout_secs as u64 * 1000,
                     trigger_price: req.trigger_price,
-                    last_trade_time: Instant::now(),
+                    start_timestamp,
                     active,
+                };
+                if let Err(e) = db::save_panic_stop(&self.db, &persisted) {
+                    tracing::error!("Failed to save panic stop state to database: {:#}", e);
+                }
+                let state = PanicStopState {
+                    persisted,
+                    last_trade_time: Instant::now(),
                 };
                 *self.panic_stop_state.lock().await = Some(state);
                 if active {
