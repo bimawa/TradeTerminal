@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use redb::{Database, ReadableTable, TableDefinition};
+use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::path::PathBuf;
 use trade_shared::{PersistedPanicStopState, Side};
 
@@ -45,7 +45,7 @@ pub fn init_database() -> Result<Database> {
 
 pub fn save_panic_stop(db: &Database, state: &PersistedPanicStopState) -> Result<()> {
     let key = make_key(state);
-    let serialized = bincode::serialize(state).context("Failed to serialize PanicStopState")?;
+    let serialized = serde_json::to_vec(state).context("Failed to serialize PanicStopState")?;
 
     let write_txn = db.begin_write()?;
     {
@@ -70,7 +70,7 @@ pub fn load_panic_stop(
 
     match table.get(key.as_str())? {
         Some(value) => {
-            let state: PersistedPanicStopState = bincode::deserialize(value.value())
+            let state: PersistedPanicStopState = serde_json::from_slice(value.value())
                 .context("Failed to deserialize PanicStopState")?;
             tracing::debug!("Loaded panic stop state for {}", key);
             Ok(Some(state))
@@ -104,7 +104,7 @@ pub fn load_all_panic_stops(db: &Database) -> Result<Vec<PersistedPanicStopState
 
     for entry in table.iter()? {
         let (key, value) = entry?;
-        match bincode::deserialize::<PersistedPanicStopState>(value.value()) {
+        match serde_json::from_slice::<PersistedPanicStopState>(value.value()) {
             Ok(state) => {
                 tracing::debug!("Loaded panic stop state for {}", key.value());
                 states.push(state);
@@ -132,8 +132,13 @@ mod tests {
 
     fn create_test_db() -> (tempfile::TempDir, Database) {
         let dir = tempdir().unwrap();
-        std::env::set_var("DATA_DIR", dir.path());
-        let db = init_database().unwrap();
+        let db_path = dir.path().join("data.redb");
+        let db = Database::create(&db_path).unwrap();
+        let write_txn = db.begin_write().unwrap();
+        {
+            let _ = write_txn.open_table(PANIC_STOPS).unwrap();
+        }
+        write_txn.commit().unwrap();
         (dir, db)
     }
 
