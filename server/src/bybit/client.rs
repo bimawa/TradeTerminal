@@ -175,7 +175,11 @@ impl BybitClient {
             .context("Failed to send request")?;
 
         let resp_text = response.text().await.context("Failed to read response")?;
-        tracing::debug!("Response: {}", resp_text);
+        tracing::debug!("GET Response (len={}): {}", resp_text.len(), resp_text);
+        
+        if resp_text.is_empty() {
+            anyhow::bail!("Empty response from Bybit");
+        }
         
         let err_resp: BybitErrorResponse = serde_json::from_str(&resp_text).context("Failed to parse response")?;
         if err_resp.ret_code != 0 {
@@ -209,8 +213,15 @@ impl BybitClient {
             .await
             .context("Failed to send request")?;
 
+        let status = response.status();
+        tracing::debug!("GET Response status: {}", status);
+        
         let resp_text = response.text().await.context("Failed to read response")?;
-        tracing::debug!("Response: {}", resp_text);
+        tracing::debug!("GET Response (len={}): '{}'", resp_text.len(), resp_text);
+        
+        if resp_text.is_empty() {
+            anyhow::bail!("Empty response from Bybit");
+        }
         
         let err_resp: BybitErrorResponse = serde_json::from_str(&resp_text).context("Failed to parse response")?;
         if err_resp.ret_code != 0 {
