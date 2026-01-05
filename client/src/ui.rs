@@ -327,16 +327,22 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
     let y_min = (adjusted_center - half_range).to_string().parse::<f64>().unwrap_or(0.0);
     let y_max = (adjusted_center + half_range).to_string().parse::<f64>().unwrap_or(100.0);
 
-    let tracking_flag = if app.price_tracking { " track:ON" } else { "" };
     let title = format!(
-        " {} tf:{}{} h/l +/- [/] j/k 0=reset 1=track ",
+        " {} tf:{} h/l +/- [/] j/k 0=reset 1=track ",
         app.symbol,
         app.chart_interval,
-        tracking_flag,
     );
 
+    let tracking_status = if app.price_tracking { "track:ON" } else { "track:OFF" };
+    let right_title = format!(" {} ", tracking_status);
+
     let canvas = Canvas::default()
-        .block(Block::default().borders(Borders::ALL).title(title))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title)
+                .title_top(Line::from(right_title).right_aligned())
+        )
         .x_bounds([0.0, (visible_count * (candle_width + 1)) as f64])
         .y_bounds([y_min, y_max])
         .paint(|ctx| {
