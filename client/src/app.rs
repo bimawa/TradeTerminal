@@ -141,6 +141,7 @@ pub struct App {
     pub panic_stop_trigger_price: Option<Decimal>,
     pub mouse_position: Option<(u16, u16)>,
     pub chart_area: Option<ratatui::layout::Rect>,
+    pub price_tracking: bool,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -221,6 +222,7 @@ impl App {
             panic_stop_trigger_price: None,
             mouse_position: None,
             chart_area: None,
+            price_tracking: false,
         }
     }
 
@@ -335,6 +337,9 @@ impl App {
                     self.chart_zoom = 2;
                     self.chart_zoom_v = 1;
                     self.chart_offset_v = 0;
+                }
+                KeyCode::Char('1') if self.tab == Tab::Chart => {
+                    self.price_tracking = !self.price_tracking;
                 }
                 _ => {}
             },

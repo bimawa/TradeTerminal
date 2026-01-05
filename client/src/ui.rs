@@ -311,18 +311,28 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
     let range = max_price - min_price;
     let center = min_price + range / Decimal::from(2);
     let half_range = (range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
-    
+
     let tick_size = range / Decimal::from(100);
-    let v_offset = tick_size * Decimal::from(app.chart_offset_v);
-    let adjusted_center = center + v_offset;
+    let v_offset = if app.price_tracking {
+        if let Some(current_price) = app.last_price {
+            (current_price - center) / tick_size
+        } else {
+            Decimal::from(app.chart_offset_v)
+        }
+    } else {
+        Decimal::from(app.chart_offset_v)
+    };
+    let adjusted_center = center + tick_size * v_offset;
     
     let y_min = (adjusted_center - half_range).to_string().parse::<f64>().unwrap_or(0.0);
     let y_max = (adjusted_center + half_range).to_string().parse::<f64>().unwrap_or(100.0);
 
+    let tracking_flag = if app.price_tracking { " track:ON" } else { "" };
     let title = format!(
-        " {} tf:{} h/l +/- [/] j/k 0=reset ",
+        " {} tf:{}{} h/l +/- [/] j/k 0=reset 1=track ",
         app.symbol,
         app.chart_interval,
+        tracking_flag,
     );
 
     let canvas = Canvas::default()
@@ -526,10 +536,18 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
     let price_range = max_price - min_price;
     let center = min_price + price_range / Decimal::from(2);
     let half_range = (price_range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
-    
+
     let tick_size = price_range / Decimal::from(100);
-    let v_offset = tick_size * Decimal::from(app.chart_offset_v);
-    let adjusted_center = center + v_offset;
+    let v_offset = if app.price_tracking {
+        if let Some(current_price) = app.last_price {
+            (current_price - center) / tick_size
+        } else {
+            Decimal::from(app.chart_offset_v)
+        }
+    } else {
+        Decimal::from(app.chart_offset_v)
+    };
+    let adjusted_center = center + tick_size * v_offset;
     
     let y_min = adjusted_center - half_range;
     let y_max = adjusted_center + half_range;
