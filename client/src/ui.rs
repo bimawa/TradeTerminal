@@ -451,25 +451,40 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                 let is_bullish = close >= open;
                 let color = if is_bullish { Color::Green } else { Color::Red };
 
-                let wick_low = low.max(y_min);
-                let wick_high = high.min(y_max);
+                let body_top = open.max(close);
+                let body_bottom = open.min(close);
 
-                ctx.draw(&CanvasLine {
-                    x1: x,
-                    y1: wick_low,
-                    x2: x,
-                    y2: wick_high,
-                    color,
-                });
+                let wick_top = high;
+                let wick_bottom = low;
 
-                let body_top = open.max(close).min(y_max);
-                let body_bottom = open.min(close).max(y_min);
-                let body_height = body_top - body_bottom;
+                if wick_top > y_min && wick_top <= y_max && body_top >= y_min && body_top <= y_max {
+                    ctx.draw(&CanvasLine {
+                        x1: x,
+                        y1: body_top,
+                        x2: x,
+                        y2: wick_top,
+                        color,
+                    });
+                }
+
+                if wick_bottom >= y_min && wick_bottom < y_max && body_bottom >= y_min && body_bottom <= y_max {
+                    ctx.draw(&CanvasLine {
+                        x1: x,
+                        y1: wick_bottom,
+                        x2: x,
+                        y2: body_bottom,
+                        color,
+                    });
+                }
+
+                let visible_body_top = body_top.min(y_max);
+                let visible_body_bottom = body_bottom.max(y_min);
+                let body_height = visible_body_top - visible_body_bottom;
 
                 if body_height > 0.0 {
                     ctx.draw(&Rectangle {
                         x: x - (candle_width as f64 / 2.0) + 0.5,
-                        y: body_bottom,
+                        y: visible_body_bottom,
                         width: candle_width as f64 - 1.0,
                         height: body_height,
                         color,
