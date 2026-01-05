@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
 use std::fs;
@@ -147,6 +147,42 @@ const HISTORY_FILE: &str = ".trade_history";
 const MAX_HISTORY: usize = 500;
 
 impl App {
+    fn find_word_start_left(input: &str, cursor: usize) -> usize {
+        if cursor == 0 {
+            return 0;
+        }
+        let chars: Vec<char> = input.chars().collect();
+        let mut pos = cursor.saturating_sub(1);
+
+        while pos > 0 && chars[pos].is_whitespace() {
+            pos -= 1;
+        }
+
+        while pos > 0 && !chars[pos - 1].is_whitespace() {
+            pos -= 1;
+        }
+
+        pos
+    }
+
+    fn find_word_end_right(input: &str, cursor: usize) -> usize {
+        let chars: Vec<char> = input.chars().collect();
+        if cursor >= chars.len() {
+            return chars.len();
+        }
+        let mut pos = cursor;
+
+        while pos < chars.len() && chars[pos].is_whitespace() {
+            pos += 1;
+        }
+
+        while pos < chars.len() && !chars[pos].is_whitespace() {
+            pos += 1;
+        }
+
+        pos
+    }
+
     pub fn new(
         conn_tx: mpsc::Sender<ClientMessage>,
         server_rx: mpsc::Receiver<ServerMessage>,
@@ -302,85 +338,101 @@ impl App {
                 }
                 _ => {}
             },
-            InputMode::Command => match key.code {
-                KeyCode::Esc => {
-                    self.input_mode = InputMode::Normal;
-                    self.input.clear();
-                    self.input_cursor = 0;
-                    self.history_index = None;
-                }
-                KeyCode::Enter => {
-                    let cmd = self.input.clone();
-                    self.input.clear();
-                    self.input_cursor = 0;
-                    self.input_mode = InputMode::Normal;
-                    self.history_index = None;
-                    if !cmd.is_empty() {
-                        self.command_history.push(cmd.clone());
-                        self.save_history();
+            InputMode::Command => {
+                let ctrl_or_alt = key.modifiers.contains(KeyModifiers::CONTROL)
+                    || key.modifiers.contains(KeyModifiers::ALT);
+
+                match key.code {
+                    KeyCode::Esc => {
+                        self.input_mode = InputMode::Normal;
+                        self.input.clear();
+                        self.input_cursor = 0;
+                        self.history_index = None;
                     }
-                    self.execute_command(&cmd).await?;
-                }
-                KeyCode::Left => {
-                    if self.input_cursor > 0 {
-                        self.input_cursor -= 1;
+                    KeyCode::Enter => {
+                        let cmd = self.input.clone();
+                        self.input.clear();
+                        self.input_cursor = 0;
+                        self.input_mode = InputMode::Normal;
+                        self.history_index = None;
+                        if !cmd.is_empty() {
+                            self.command_history.push(cmd.clone());
+                            self.save_history();
+                        }
+                        self.execute_command(&cmd).await?;
                     }
-                }
-                KeyCode::Right => {
-                    if self.input_cursor < self.input.len() {
-                        self.input_cursor += 1;
-                    }
-                }
-                KeyCode::Up => {
-                    if !self.command_history.is_empty() {
-                        let new_index = match self.history_index {
-                            None => self.command_history.len() - 1,
-                            Some(0) => 0,
-                            Some(i) => i - 1,
-                        };
-                        self.history_index = Some(new_index);
-                        self.input = self.command_history[new_index].clone();
-                        self.input_cursor = self.input.len();
-                    }
-                }
-                KeyCode::Down => {
-                    if let Some(i) = self.history_index {
-                        if i + 1 < self.command_history.len() {
-                            self.history_index = Some(i + 1);
-                            self.input = self.command_history[i + 1].clone();
-                            self.input_cursor = self.input.len();
-                        } else {
-                            self.history_index = None;
-                            self.input.clear();
-                            self.input_cursor = 0;
+                    KeyCode::Left => {
+                        if ctrl_or_alt {
+                            self.input_cursor = Self::find_word_start_left(&self.input, self.input_cursor);
+                        } else if self.input_cursor > 0 {
+                            self.input_cursor -= 1;
                         }
                     }
-                }
-                KeyCode::Tab => {
-                    self.autocomplete();
-                }
-                KeyCode::Char(c) => {
-                    self.input.insert(self.input_cursor, c);
-                    self.input_cursor += 1;
-                }
-                KeyCode::Backspace => {
-                    if self.input_cursor > 0 {
-                        self.input_cursor -= 1;
-                        self.input.remove(self.input_cursor);
+                    KeyCode::Right => {
+                        if ctrl_or_alt {
+                            self.input_cursor = Self::find_word_end_right(&self.input, self.input_cursor);
+                        } else if self.input_cursor < self.input.len() {
+                            self.input_cursor += 1;
+                        }
                     }
-                }
-                KeyCode::Delete => {
-                    if self.input_cursor < self.input.len() {
-                        self.input.remove(self.input_cursor);
+                    KeyCode::Up => {
+                        if !self.command_history.is_empty() {
+                            let new_index = match self.history_index {
+                                None => self.command_history.len() - 1,
+                                Some(0) => 0,
+                                Some(i) => i - 1,
+                            };
+                            self.history_index = Some(new_index);
+                            self.input = self.command_history[new_index].clone();
+                            self.input_cursor = self.input.len();
+                        }
                     }
+                    KeyCode::Down => {
+                        if let Some(i) = self.history_index {
+                            if i + 1 < self.command_history.len() {
+                                self.history_index = Some(i + 1);
+                                self.input = self.command_history[i + 1].clone();
+                                self.input_cursor = self.input.len();
+                            } else {
+                                self.history_index = None;
+                                self.input.clear();
+                                self.input_cursor = 0;
+                            }
+                        }
+                    }
+                    KeyCode::Tab => {
+                        self.autocomplete();
+                    }
+                    KeyCode::Char(c) => {
+                        self.input.insert(self.input_cursor, c);
+                        self.input_cursor += 1;
+                    }
+                    KeyCode::Backspace => {
+                        if ctrl_or_alt {
+                            let word_start = Self::find_word_start_left(&self.input, self.input_cursor);
+                            self.input.drain(word_start..self.input_cursor);
+                            self.input_cursor = word_start;
+                        } else if self.input_cursor > 0 {
+                            self.input_cursor -= 1;
+                            self.input.remove(self.input_cursor);
+                        }
+                    }
+                    KeyCode::Delete => {
+                        if ctrl_or_alt {
+                            let word_end = Self::find_word_end_right(&self.input, self.input_cursor);
+                            self.input.drain(self.input_cursor..word_end);
+                        } else if self.input_cursor < self.input.len() {
+                            self.input.remove(self.input_cursor);
+                        }
+                    }
+                    KeyCode::Home => {
+                        self.input_cursor = 0;
+                    }
+                    KeyCode::End => {
+                        self.input_cursor = self.input.len();
+                    }
+                    _ => {}
                 }
-                KeyCode::Home => {
-                    self.input_cursor = 0;
-                }
-                KeyCode::End => {
-                    self.input_cursor = self.input.len();
-                }
-                _ => {}
             },
             InputMode::Copy => match key.code {
                 KeyCode::Esc | KeyCode::Char('y') => {
