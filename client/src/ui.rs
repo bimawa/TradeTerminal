@@ -779,7 +779,7 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
             false
         };
 
-        let mut spans = if is_mouse_line {
+        let spans = if is_mouse_line {
             let percent_str = format!("{}{:.2}%", sign, diff_percent);
             let price_aligned = format!("{:>width$}", price_str, width = price_width);
             vec![Span::styled(
