@@ -316,8 +316,14 @@ impl App {
                         self.chart_zoom -= 1;
                     }
                 }
+                KeyCode::Char('}') if self.tab == Tab::Chart => {
+                    self.chart_zoom_v = (self.chart_zoom_v + 10).min(200);
+                }
+                KeyCode::Char('{') if self.tab == Tab::Chart => {
+                    self.chart_zoom_v = self.chart_zoom_v.saturating_sub(10).max(1);
+                }
                 KeyCode::Char(']') if self.tab == Tab::Chart => {
-                    if self.chart_zoom_v < 10 {
+                    if self.chart_zoom_v < 200 {
                         self.chart_zoom_v += 1;
                     }
                 }
@@ -487,7 +493,8 @@ impl App {
                     {
                         if let Some(price) = self.get_price_at_mouse(mouse.column, mouse.row) {
                             if let Some(ref mut cb) = self.clipboard {
-                                let price_str = price.to_string();
+                                let price_rounded = price.round_dp(10);
+                                let price_str = price_rounded.to_string();
                                 if cb.set_text(price_str.clone()).is_ok() {
                                     self.messages.push(format!("Copied: {}", price_str));
                                 }
@@ -534,7 +541,52 @@ impl App {
         let center = min_price + range / Decimal::from(2);
         let half_range = (range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
 
-        let tick_size = range / Decimal::from(100);
+        let tick_size = if self.chart_zoom_v >= 150 {
+            if max_price >= Decimal::from(1000) {
+                Decimal::from_str_exact("0.01").unwrap()
+            } else if max_price >= Decimal::from(100) {
+                Decimal::from_str_exact("0.001").unwrap()
+            } else if max_price >= Decimal::from(10) {
+                Decimal::from_str_exact("0.0001").unwrap()
+            } else if max_price >= Decimal::from(1) {
+                Decimal::from_str_exact("0.00001").unwrap()
+            } else {
+                Decimal::from_str_exact("0.000001").unwrap()
+            }
+        } else if self.chart_zoom_v >= 100 {
+            if max_price >= Decimal::from(1000) {
+                Decimal::from_str_exact("0.05").unwrap()
+            } else if max_price >= Decimal::from(100) {
+                Decimal::from_str_exact("0.005").unwrap()
+            } else if max_price >= Decimal::from(10) {
+                Decimal::from_str_exact("0.0005").unwrap()
+            } else {
+                Decimal::from_str_exact("0.00005").unwrap()
+            }
+        } else if self.chart_zoom_v >= 50 {
+            if max_price >= Decimal::from(1000) {
+                Decimal::from_str_exact("0.1").unwrap()
+            } else if max_price >= Decimal::from(100) {
+                Decimal::from_str_exact("0.01").unwrap()
+            } else if max_price >= Decimal::from(10) {
+                Decimal::from_str_exact("0.001").unwrap()
+            } else {
+                Decimal::from_str_exact("0.0001").unwrap()
+            }
+        } else if self.chart_zoom_v >= 20 {
+            if max_price >= Decimal::from(1000) {
+                Decimal::from_str_exact("0.5").unwrap()
+            } else if max_price >= Decimal::from(100) {
+                Decimal::from_str_exact("0.05").unwrap()
+            } else if max_price >= Decimal::from(10) {
+                Decimal::from_str_exact("0.005").unwrap()
+            } else {
+                Decimal::from_str_exact("0.0005").unwrap()
+            }
+        } else {
+            range / Decimal::from(100)
+        };
+
         let v_offset = tick_size * Decimal::from(self.chart_offset_v);
         let adjusted_center = center + v_offset;
 

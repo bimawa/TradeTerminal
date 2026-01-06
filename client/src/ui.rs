@@ -267,11 +267,18 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_chart(f: &mut Frame, app: &mut App, area: Rect) {
+    let price_col_width = if let Some(last_price) = app.last_price {
+        let int_digits = last_price.trunc().to_string().len();
+        (int_digits + 1 + 10 + 2).max(23) as u16
+    } else {
+        23
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Min(40),
-            Constraint::Length(12),
+            Constraint::Length(price_col_width),
             Constraint::Length(22),
         ])
         .split(area);
@@ -317,7 +324,52 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
     let center = min_price + range / Decimal::from(2);
     let half_range = (range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
 
-    let tick_size = range / Decimal::from(100);
+    let tick_size = if app.chart_zoom_v >= 150 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.01").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.001").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.0001").unwrap()
+        } else if max_price >= Decimal::from(1) {
+            Decimal::from_str_exact("0.00001").unwrap()
+        } else {
+            Decimal::from_str_exact("0.000001").unwrap()
+        }
+    } else if app.chart_zoom_v >= 100 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.05").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.005").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.0005").unwrap()
+        } else {
+            Decimal::from_str_exact("0.00005").unwrap()
+        }
+    } else if app.chart_zoom_v >= 50 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.1").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.01").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.001").unwrap()
+        } else {
+            Decimal::from_str_exact("0.0001").unwrap()
+        }
+    } else if app.chart_zoom_v >= 20 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.5").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.05").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.005").unwrap()
+        } else {
+            Decimal::from_str_exact("0.0005").unwrap()
+        }
+    } else {
+        range / Decimal::from(100)
+    };
+
     let v_offset = if app.price_tracking {
         if let Some(current_price) = app.last_price {
             (current_price - center) / tick_size
@@ -502,11 +554,12 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                     && mouse_y >= area.y && mouse_y < area.y + area.height
                 {
                     let x_in_canvas = ((mouse_x - area.x).saturating_sub(1) as f64).min((visible_count * (candle_width + 1)) as f64);
+                    let x_adjusted = (x_in_canvas - 1.0).max(0.0);
 
                     ctx.draw(&CanvasLine {
-                        x1: x_in_canvas,
+                        x1: x_adjusted,
                         y1: y_min,
-                        x2: x_in_canvas,
+                        x2: x_adjusted,
                         y2: y_max,
                         color: Color::Gray,
                     });
@@ -521,7 +574,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                         ctx.draw(&CanvasLine {
                             x1: 0.0,
                             y1: price_at_mouse,
-                            x2: (visible_count * (candle_width + 1)) as f64,
+                            x2: (visible_count * (candle_width + 1) + 1) as f64,
                             y2: price_at_mouse,
                             color: Color::Gray,
                         });
@@ -563,7 +616,52 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
     let center = min_price + price_range / Decimal::from(2);
     let half_range = (price_range + base_padding * Decimal::from(2)) / zoom_factor / Decimal::from(2);
 
-    let tick_size = price_range / Decimal::from(100);
+    let tick_size = if app.chart_zoom_v >= 150 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.01").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.001").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.0001").unwrap()
+        } else if max_price >= Decimal::from(1) {
+            Decimal::from_str_exact("0.00001").unwrap()
+        } else {
+            Decimal::from_str_exact("0.000001").unwrap()
+        }
+    } else if app.chart_zoom_v >= 100 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.05").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.005").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.0005").unwrap()
+        } else {
+            Decimal::from_str_exact("0.00005").unwrap()
+        }
+    } else if app.chart_zoom_v >= 50 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.1").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.01").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.001").unwrap()
+        } else {
+            Decimal::from_str_exact("0.0001").unwrap()
+        }
+    } else if app.chart_zoom_v >= 20 {
+        if max_price >= Decimal::from(1000) {
+            Decimal::from_str_exact("0.5").unwrap()
+        } else if max_price >= Decimal::from(100) {
+            Decimal::from_str_exact("0.05").unwrap()
+        } else if max_price >= Decimal::from(10) {
+            Decimal::from_str_exact("0.005").unwrap()
+        } else {
+            Decimal::from_str_exact("0.0005").unwrap()
+        }
+    } else {
+        price_range / Decimal::from(100)
+    };
+
     let v_offset = if app.price_tracking {
         if let Some(current_price) = app.last_price {
             (current_price - center) / tick_size
@@ -574,7 +672,7 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
         Decimal::from(app.chart_offset_v)
     };
     let adjusted_center = center + tick_size * v_offset;
-    
+
     let y_min = adjusted_center - half_range;
     let y_max = adjusted_center + half_range;
     let range = y_max - y_min;
@@ -615,13 +713,38 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
         None
     };
 
-    for i in 0..available_lines {
-        let price = y_max - range * Decimal::from(i) / Decimal::from(available_lines.saturating_sub(1).max(1));
+    let price_width = if let Some(last_price) = app.last_price {
+        let int_digits = last_price.trunc().to_string().len();
+        (int_digits + 1 + 10).max(14)
+    } else {
+        14
+    };
 
-        let decimals = if range < Decimal::from(10) { 4 }
-            else if range < Decimal::from(100) { 2 }
-            else { 1 };
-        let price_str = format!("{:.prec$}", price, prec = decimals);
+    let align_width = area.width.saturating_sub(2) as usize;
+
+    for i in 0..available_lines {
+        let raw_price = y_max - range * Decimal::from(i) / Decimal::from(available_lines.saturating_sub(1).max(1));
+
+        let price = if app.chart_zoom_v >= 20 && !tick_size.is_zero() {
+            (raw_price / tick_size).round() * tick_size
+        } else {
+            raw_price
+        };
+
+        let display_price = raw_price;
+
+        let price_str = {
+            let price_rounded = display_price.round_dp(10);
+            let price_string = price_rounded.to_string();
+
+            if let Some(dot_idx) = price_string.find('.') {
+                let int_part = &price_string[..dot_idx];
+                let frac_part = &price_string[dot_idx + 1..];
+                format!("{}.{:0<10}", int_part, frac_part)
+            } else {
+                format!("{}.{:0<10}", price_string, "")
+            }
+        };
 
         // Check if this price is in the PnL range for coloring
         let pnl_highlight_color = if let (Some(color), Some(pos), Some(current)) = (pnl_color, current_pos, app.last_price) {
@@ -639,32 +762,38 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
             None
         };
 
-        // Color the price text itself if in PnL range
-        let mut spans = if let Some(color) = pnl_highlight_color {
+        let diff_percent = if let Some(current_price) = app.last_price {
+            if !current_price.is_zero() {
+                ((price - current_price) / current_price) * Decimal::from(100)
+            } else {
+                Decimal::ZERO
+            }
+        } else {
+            Decimal::ZERO
+        };
+        let sign = if diff_percent >= Decimal::ZERO { "+" } else { "" };
+
+        let is_mouse_line = if let Some(mp) = mouse_price {
+            (price - mp).abs() <= range / Decimal::from(available_lines * 2)
+        } else {
+            false
+        };
+
+        let mut spans = if is_mouse_line {
+            let percent_str = format!("{}{:.2}%", sign, diff_percent);
+            let price_aligned = format!("{:>width$}", price_str, width = price_width);
+            vec![Span::styled(
+                format!("{} {}", percent_str, price_aligned),
+                Style::default().fg(Color::White).bg(Color::DarkGray).add_modifier(Modifier::BOLD),
+            )]
+        } else if let Some(color) = pnl_highlight_color {
             vec![
-                Span::styled(format!("{:>10}", price_str), Style::default().fg(color)),
+                Span::styled(format!("{:>width$}", price_str, width = align_width), Style::default().fg(color)),
                 Span::styled(" █", Style::default().fg(color)),
             ]
         } else {
-            vec![Span::raw(format!("{:>10}", price_str))]
+            vec![Span::raw(format!("{:>width$}", price_str, width = align_width))]
         };
-
-        if let Some(mp) = mouse_price {
-            if (price - mp).abs() <= range / Decimal::from(available_lines * 2) {
-                let current_price = app.last_price.unwrap_or(mp);
-                let diff_percent = if !current_price.is_zero() {
-                    ((mp - current_price) / current_price) * Decimal::from(100)
-                } else {
-                    Decimal::ZERO
-                };
-                let sign = if diff_percent >= Decimal::ZERO { "+" } else { "" };
-                let price_label = format!(" {:>10} {}{:.2}%", mp.to_string(), sign, diff_percent);
-                spans = vec![Span::styled(
-                    price_label,
-                    Style::default().fg(Color::White).bg(Color::DarkGray).add_modifier(Modifier::BOLD),
-                )];
-            }
-        }
 
         lines.push(Line::from(spans));
     }
