@@ -574,7 +574,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                         ctx.draw(&CanvasLine {
                             x1: 0.0,
                             y1: price_at_mouse,
-                            x2: (visible_count * (candle_width + 1) + 1) as f64,
+                            x2: (visible_count * (candle_width + 1)) as f64,
                             y2: price_at_mouse,
                             color: Color::Gray,
                         });
