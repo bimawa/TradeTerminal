@@ -1278,8 +1278,10 @@ impl App {
         first[..prefix_len].to_string()
     }
 
-    pub async fn process_messages(&mut self) -> Result<()> {
+    pub async fn process_messages(&mut self) -> Result<bool> {
+        let mut had_messages = false;
         while let Ok(msg) = self.server_rx.try_recv() {
+            had_messages = true;
             match msg.payload {
                 ServerPayload::Connected => {
                     self.connected = true;
@@ -1443,6 +1445,6 @@ impl App {
             self.messages.drain(0..50);
         }
 
-        Ok(())
+        Ok(had_messages)
     }
 }

@@ -58,12 +58,19 @@ async fn main() -> Result<()> {
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     let mut last_refresh = std::time::Instant::now();
+    let mut last_render = std::time::Instant::now();
     let refresh_interval = std::time::Duration::from_secs(1);
+    let render_interval = std::time::Duration::from_millis(33);
+    let mut needs_render = true;
 
     loop {
-        terminal.draw(|f| ui::draw(f, &mut app))?;
+        if needs_render && last_render.elapsed() >= render_interval {
+            terminal.draw(|f| ui::draw(f, &mut app))?;
+            last_render = std::time::Instant::now();
+            needs_render = false;
+        }
 
-        if event::poll(std::time::Duration::from_millis(100))? {
+        if event::poll(std::time::Duration::from_millis(8))? {
             match event::read()? {
                 Event::Key(key) => {
                     if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -73,19 +80,24 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                         return Ok(());
                     }
                     app.handle_key(key).await?;
+                    needs_render = true;
                 }
                 Event::Mouse(mouse) => {
                     app.handle_mouse(mouse).await?;
+                    needs_render = true;
                 }
                 _ => {}
             }
         }
 
-        app.process_messages().await?;
+        if app.process_messages().await? {
+            needs_render = true;
+        }
 
         if last_refresh.elapsed() >= refresh_interval {
             app.auto_refresh().await?;
             last_refresh = std::time::Instant::now();
+            needs_render = true;
         }
     }
 }

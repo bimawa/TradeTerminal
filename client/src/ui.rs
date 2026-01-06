@@ -8,8 +8,13 @@ use ratatui::{
     },
     Frame,
 };
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use trade_shared::Side;
+
+fn dec_to_f64(d: Decimal) -> f64 {
+    d.to_f64().unwrap_or(0.0)
+}
 
 use crate::app::{App, InputMode, Tab};
 
@@ -293,7 +298,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
     let visible_count = (area.width as usize).saturating_sub(2) / (candle_width + 1);
     let start_idx = app.candles.len().saturating_sub(visible_count + app.chart_offset);
     let end_idx = app.candles.len().saturating_sub(app.chart_offset);
-    let visible_candles: Vec<_> = app.candles[start_idx..end_idx].to_vec();
+    let visible_candles = &app.candles[start_idx..end_idx];
 
     if visible_candles.is_empty() {
         return;
@@ -324,8 +329,8 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
     };
     let adjusted_center = center + tick_size * v_offset;
     
-    let y_min = (adjusted_center - half_range).to_string().parse::<f64>().unwrap_or(0.0);
-    let y_max = (adjusted_center + half_range).to_string().parse::<f64>().unwrap_or(100.0);
+    let y_min = dec_to_f64(adjusted_center - half_range);
+    let y_max = dec_to_f64(adjusted_center + half_range);
 
     let title = format!(
         " {} tf:{} h/l +/- [/] j/k 0=reset 1=track ",
@@ -347,7 +352,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
         .y_bounds([y_min, y_max])
         .paint(|ctx| {
             for level in &app.chart_levels {
-                let y = level.to_string().parse::<f64>().unwrap_or(0.0);
+                let y = dec_to_f64(*level);
                 if y >= y_min && y <= y_max {
                     ctx.draw(&CanvasLine {
                         x1: 0.0,
@@ -363,7 +368,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                 if pos.symbol.0 == app.symbol {
                     let x_end = (visible_count * (candle_width + 1)) as f64;
 
-                    let entry_y = pos.entry_price.to_string().parse::<f64>().unwrap_or(0.0);
+                    let entry_y = dec_to_f64(pos.entry_price);
                     if entry_y >= y_min && entry_y <= y_max {
                         ctx.draw(&CanvasLine {
                             x1: 0.0,
@@ -375,7 +380,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                     }
 
                     if let Some(tp) = pos.take_profit {
-                        let tp_y = tp.to_string().parse::<f64>().unwrap_or(0.0);
+                        let tp_y = dec_to_f64(tp);
                         if tp_y >= y_min && tp_y <= y_max {
                             ctx.draw(&CanvasLine {
                                 x1: 0.0,
@@ -388,7 +393,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                     }
 
                     if let Some(sl) = pos.stop_loss {
-                        let sl_y = sl.to_string().parse::<f64>().unwrap_or(0.0);
+                        let sl_y = dec_to_f64(sl);
                         if sl_y >= y_min && sl_y <= y_max {
                             ctx.draw(&CanvasLine {
                                 x1: 0.0,
@@ -401,7 +406,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                     }
 
                     if let Some(ts) = pos.trailing_stop {
-                        let ts_y = ts.to_string().parse::<f64>().unwrap_or(0.0);
+                        let ts_y = dec_to_f64(ts);
                         if ts_y >= y_min && ts_y <= y_max {
                             ctx.draw(&CanvasLine {
                                 x1: 0.0,
@@ -418,7 +423,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
             for order in &app.orders {
                 if order.symbol.0 == app.symbol {
                     if let Some(price) = order.price {
-                        let order_y = price.to_string().parse::<f64>().unwrap_or(0.0);
+                        let order_y = dec_to_f64(price);
                         if order_y >= y_min && order_y <= y_max {
                             let color = if order.side == Side::Buy {
                                 Color::Cyan
@@ -439,10 +444,10 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
 
             for (i, candle) in visible_candles.iter().enumerate() {
                 let x = (i * (candle_width + 1)) as f64 + (candle_width as f64 / 2.0);
-                let open = candle.open.to_string().parse::<f64>().unwrap_or(0.0);
-                let close = candle.close.to_string().parse::<f64>().unwrap_or(0.0);
-                let high = candle.high.to_string().parse::<f64>().unwrap_or(0.0);
-                let low = candle.low.to_string().parse::<f64>().unwrap_or(0.0);
+                let open = dec_to_f64(candle.open);
+                let close = dec_to_f64(candle.close);
+                let high = dec_to_f64(candle.high);
+                let low = dec_to_f64(candle.low);
 
                 if high < y_min || low > y_max {
                     continue;
