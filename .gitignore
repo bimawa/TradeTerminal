@@ -6,3 +6,6 @@
 .worktrees/
 .claude_settings.json
 .auto-claude-status
+
+.genie/state/*
+!.genie/state/version.json
