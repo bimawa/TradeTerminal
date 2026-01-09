@@ -451,29 +451,6 @@ impl BybitClient {
         Ok(())
     }
 
-    pub async fn get_position_mode(&self) -> Result<u8> {
-        #[derive(Debug, Deserialize, Default)]
-        struct PositionModeResult {
-            list: Vec<PositionModeItem>,
-        }
-
-        #[derive(Debug, Deserialize)]
-        struct PositionModeItem {
-            #[serde(rename = "posMode")]
-            pos_mode: u8,
-        }
-
-        let params = "category=linear";
-        let result: PositionModeResult = self.get("/v5/position/get-position-mode", params).await?;
-
-        result
-            .list
-            .into_iter()
-            .next()
-            .map(|item| item.pos_mode)
-            .context("No position mode info returned")
-    }
-
     pub async fn switch_to_hedge_mode(&self) -> Result<()> {
         #[derive(Serialize)]
         struct SwitchModeRequest {

@@ -28,51 +28,44 @@ impl ClientHandler {
                     Err(e) => {
                         let err_str = e.to_string();
                         if err_str.contains("10001") && err_str.contains("position idx not match position mode") {
-                            match self.bybit.get_position_mode().await {
-                                Ok(current_mode) => {
-                                    let mode_name = match current_mode {
-                                        0 => "One-Way",
-                                        3 => "Hedge",
-                                        _ => "Unknown",
-                                    };
-                                    if current_mode != 3 {
-                                        tracing::warn!("Position mode is {} ({}), switching to Hedge mode...", mode_name, current_mode);
-                                        match self.bybit.switch_to_hedge_mode().await {
-                                            Ok(_) => {
-                                                let notification = ServerMessage::new(ServerPayload::PositionModeChanged {
-                                                    from_mode: mode_name.to_string(),
-                                                    to_mode: "Hedge".to_string(),
-                                                });
-                                                let _ = tx.send(notification).await;
+                            tracing::warn!("Position mode mismatch detected, attempting to switch to Hedge mode...");
+                            match self.bybit.switch_to_hedge_mode().await {
+                                Ok(_) => {
+                                    let notification = ServerMessage::new(ServerPayload::PositionModeChanged {
+                                        from_mode: "One-Way".to_string(),
+                                        to_mode: "Hedge".to_string(),
+                                    });
+                                    let _ = tx.send(notification).await;
 
-                                                match self.bybit.place_order(&req).await {
-                                                    Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
-                                                    Err(retry_err) => {
-                                                        tracing::error!("Failed to place order after mode switch: {:#}", retry_err);
-                                                        ServerMessage::new(ServerPayload::OrderError {
-                                                            message: format!("Failed to place {:?} order for {} after switching to Hedge mode: {}", req.order_type, req.symbol, retry_err),
-                                                        })
-                                                    }
-                                                }
-                                            }
-                                            Err(switch_err) => {
-                                                tracing::error!("Failed to switch to hedge mode: {:#}", switch_err);
+                                    match self.bybit.place_order(&req).await {
+                                        Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
+                                        Err(retry_err) => {
+                                            tracing::error!("Failed to place order after mode switch: {:#}", retry_err);
+                                            ServerMessage::new(ServerPayload::OrderError {
+                                                message: format!("Failed to place {:?} order for {} after switching to Hedge mode: {}", req.order_type, req.symbol, retry_err),
+                                            })
+                                        }
+                                    }
+                                }
+                                Err(switch_err) => {
+                                    let switch_err_str = switch_err.to_string();
+                                    if switch_err_str.contains("110025") {
+                                        tracing::info!("Already in hedge mode, retrying order...");
+                                        match self.bybit.place_order(&req).await {
+                                            Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
+                                            Err(retry_err) => {
+                                                tracing::error!("Failed to place order on retry: {:#}", retry_err);
                                                 ServerMessage::new(ServerPayload::OrderError {
-                                                    message: format!("Position mode is {}, but failed to switch to Hedge mode: {}", mode_name, switch_err),
+                                                    message: format!("Failed to place {:?} order for {}: {}", req.order_type, req.symbol, retry_err),
                                                 })
                                             }
                                         }
                                     } else {
+                                        tracing::error!("Failed to switch to hedge mode: {:#}", switch_err);
                                         ServerMessage::new(ServerPayload::OrderError {
-                                            message: format!("Failed to place {:?} order for {}: {}", req.order_type, req.symbol, e),
+                                            message: format!("Position mode error. Failed to switch to Hedge mode: {}", switch_err),
                                         })
                                     }
-                                }
-                                Err(mode_err) => {
-                                    tracing::error!("Failed to get position mode: {:#}", mode_err);
-                                    ServerMessage::new(ServerPayload::OrderError {
-                                        message: format!("Position mode error (10001). Failed to check current mode: {}", mode_err),
-                                    })
                                 }
                             }
                         } else {
