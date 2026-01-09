@@ -422,7 +422,26 @@ impl App {
                         }
                     }
                     KeyCode::Tab => {
-                        self.autocomplete();
+                        self.tab = match self.tab {
+                            Tab::Orders => Tab::Positions,
+                            Tab::Positions => Tab::Trade,
+                            Tab::Trade => Tab::Chart,
+                            Tab::Chart => Tab::Orders,
+                        };
+                        if self.tab == Tab::Chart && self.candles.is_empty() {
+                            self.refresh_candles().await?;
+                        }
+                    }
+                    KeyCode::BackTab => {
+                        self.tab = match self.tab {
+                            Tab::Orders => Tab::Chart,
+                            Tab::Positions => Tab::Orders,
+                            Tab::Trade => Tab::Positions,
+                            Tab::Chart => Tab::Trade,
+                        };
+                        if self.tab == Tab::Chart && self.candles.is_empty() {
+                            self.refresh_candles().await?;
+                        }
                     }
                     KeyCode::Char(c) => {
                         self.input.insert(self.input_cursor, c);

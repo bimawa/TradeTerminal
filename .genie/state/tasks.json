@@ -13,6 +13,19 @@
       "lastPrompt": "@/tmp/genie/development-infrastructure-plan.md\n\nImplement Phase 1: Essential Development Infrastructure for TradeTerminal\n\n**Context:** This is a Rust trading terminal for Bybit with client-server arc",
       "forgeUrl": "http://localhost:8887/projects/7b49406e-6f45-41f4-82f6-c18682fa4a21/tasks/3e48c509-364f-450a-bdc2-dabfa032594c/attempts/e20970af-6a1e-442a-95c7-51a16c17054e?view=diffs",
       "background": true
+    },
+    "ddfb91c8-35c7-46b6-8b2b-0fee736001d7": {
+      "agent": "code/fix",
+      "taskId": "0c6c881e-b190-48a6-b3d0-fc99c4e3ad81",
+      "projectId": "1fdbd174-280b-4c19-9194-038323b66309",
+      "executor": "CLAUDE_CODE",
+      "executorVariant": "CODE_FIX",
+      "status": "background",
+      "created": "2026-01-09T23:20:22.094Z",
+      "lastUsed": "2026-01-09T23:20:22.094Z",
+      "lastPrompt": "User reports that Shift+Tab and Tab keyboard navigation don't work in command mode, preventing users from reading help on the Trade tab and other tabs.\n\n**Current Problem:**\n- In command mode, Shift+T",
+      "forgeUrl": "http://localhost:8887/projects/1fdbd174-280b-4c19-9194-038323b66309/tasks/0c6c881e-b190-48a6-b3d0-fc99c4e3ad81/attempts/ddfb91c8-35c7-46b6-8b2b-0fee736001d7?view=diffs",
+      "background": true
     }
   }
 }
