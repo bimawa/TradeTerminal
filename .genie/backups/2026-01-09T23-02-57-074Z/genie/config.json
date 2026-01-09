@@ -1,0 +1,5 @@
+{
+  "project": "TradeTerminal",
+  "tech_stack": "Rust + WebSocket",
+  "description": "Trading terminal for Bybit with client-server architecture"
+}

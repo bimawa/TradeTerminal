@@ -1,0 +1,1133 @@
+{
+  ".auto-claude/specs/001-create-new-command-for-smart-panic-sell/memory/gotchas.md": {
+    "hash": "IyBHb3RjaGFzICYgUGl0ZmFsbHMKClRo",
+    "tokens": 66,
+    "lines": 9,
+    "bytes": 473,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/001-create-new-command-for-smart-panic-sell/spec.md": {
+    "hash": "IyBTcGVjaWZpY2F0aW9uOiBQYW5pY1N0",
+    "tokens": 1863,
+    "lines": 345,
+    "bytes": 12721,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/002-create-crosschair-lines-for-chart-s-cursor/spec.md": {
+    "hash": "IyBTcGVjaWZpY2F0aW9uOiBDaGFydCBD",
+    "tokens": 1419,
+    "lines": 247,
+    "bytes": 9393,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/003-qa-trailing-issue/spec.md": {
+    "hash": "IyBTcGVjaWZpY2F0aW9uOiBGaXggQnli",
+    "tokens": 1271,
+    "lines": 223,
+    "bytes": 8578,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/004-update-trade-commands-for-ps-command/spec.md": {
+    "hash": "IyBTcGVjOiBVcGRhdGUgVHJhZGUgQ29t",
+    "tokens": 305,
+    "lines": 52,
+    "bytes": 2010,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/005-errors-connections-and-send-requests/spec.md": {
+    "hash": "IyBTcGVjaWZpY2F0aW9uOiBGaXggQ29u",
+    "tokens": 1636,
+    "lines": 326,
+    "bytes": 11561,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/006-you-should-check-compilation-before-finish-task/QA_FIX_REQUEST.md": {
+    "hash": "IyBRQSBGaXggUmVxdWVzdAoKU3RhdHVz",
+    "tokens": 16,
+    "lines": 10,
+    "bytes": 125,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/006-you-should-check-compilation-before-finish-task/spec.md": {
+    "hash": "IyBDaGVjayBDb21waWxhdGlvbiBCZWZv",
+    "tokens": 135,
+    "lines": 27,
+    "bytes": 845,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/007-/spec.md": {
+    "hash": "IyBQbkwgUHJpY2UgUmFuZ2UgSW5kaWNh",
+    "tokens": 296,
+    "lines": 51,
+    "bytes": 1906,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/008-/spec.md": {
+    "hash": "IyBTcGVjaWZpY2F0aW9uOiBTZXJ2ZXIg",
+    "tokens": 1348,
+    "lines": 241,
+    "bytes": 9739,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/009-/spec.md": {
+    "hash": "IyBTcGVjaWZpY2F0aW9uOiBBZGQgRGF0",
+    "tokens": 1450,
+    "lines": 326,
+    "bytes": 15282,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".auto-claude/specs/010-check-errors-cargo-build/spec.md": {
+    "hash": "IyBDaGVjayBhbmQgRml4IENhcmdvIEJ1",
+    "tokens": 169,
+    "lines": 36,
+    "bytes": 1099,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/AGENTS.md": {
+    "hash": "LS0tCm5hbWU6IEJhc2UKbGFiZWw6IPCf",
+    "tokens": 34,
+    "lines": 14,
+    "bytes": 329,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/analyze.md": {
+    "hash": "LS0tCm5hbWU6IGFuYWx5emUKZGVzY3Jp",
+    "tokens": 865,
+    "lines": 177,
+    "bytes": 6864,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/forge.md": {
+    "hash": "LS0tCm5hbWU6IGZvcmdlCmRlc2NyaXB0",
+    "tokens": 1453,
+    "lines": 291,
+    "bytes": 11624,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/garbage-cleaner.md": {
+    "hash": "LS0tCm5hbWU6IGdhcmJhZ2UtY2xlYW5l",
+    "tokens": 1280,
+    "lines": 325,
+    "bytes": 9229,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/garbage-collector.md": {
+    "hash": "LS0tCm5hbWU6IGdhcmJhZ2UtY29sbGVj",
+    "tokens": 2427,
+    "lines": 597,
+    "bytes": 17027,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/github-issue-gc.md": {
+    "hash": "LS0tCm5hbWU6IGdpdGh1Yi1pc3N1ZS1n",
+    "tokens": 2641,
+    "lines": 619,
+    "bytes": 18210,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/README.md": {
+    "hash": "IyMgQWdlbnQgRnJvbnQgTWF0dGVyICYg",
+    "tokens": 645,
+    "lines": 111,
+    "bytes": 4773,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/review.md": {
+    "hash": "LS0tCm5hbWU6IHJldmlldwpkZXNjcmlw",
+    "tokens": 1995,
+    "lines": 381,
+    "bytes": 15045,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/semantic-analyzer.md": {
+    "hash": "LS0tCm5hbWU6IHNlbWFudGljLWFuYWx5",
+    "tokens": 351,
+    "lines": 102,
+    "bytes": 2898,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/semantic-analyzer/find-duplicates.md": {
+    "hash": "LS0tCm5hbWU6IGZpbmQtZHVwbGljYXRl",
+    "tokens": 321,
+    "lines": 91,
+    "bytes": 2573,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/semantic-analyzer/find-orphans.md": {
+    "hash": "LS0tCm5hbWU6IGZpbmQtb3JwaGFucwpk",
+    "tokens": 369,
+    "lines": 100,
+    "bytes": 2765,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/update.md": {
+    "hash": "LS0tCm5hbWU6IHVwZGF0ZQpkZXNjcmlw",
+    "tokens": 577,
+    "lines": 183,
+    "bytes": 4172,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/agents/wish.md": {
+    "hash": "LS0tCm5hbWU6IHdpc2gKZGVzY3JpcHRp",
+    "tokens": 1721,
+    "lines": 358,
+    "bytes": 12452,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/AGENTS.md": {
+    "hash": "LS0tCm5hbWU6IENvZGUKZGVzY3JpcHRp",
+    "tokens": 3125,
+    "lines": 693,
+    "bytes": 25247,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/audit.md": {
+    "hash": "LS0tCm5hbWU6IGF1ZGl0CmRlc2NyaXB0",
+    "tokens": 577,
+    "lines": 146,
+    "bytes": 4565,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/audit/risk.md": {
+    "hash": "LS0tCm5hbWU6IHJpc2sKZGVzY3JpcHRp",
+    "tokens": 1060,
+    "lines": 174,
+    "bytes": 7735,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/audit/security.md": {
+    "hash": "LS0tCm5hbWU6IHNlY3VyaXR5CmRlc2Ny",
+    "tokens": 877,
+    "lines": 190,
+    "bytes": 6804,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/challenge.md": {
+    "hash": "LS0tCm5hbWU6IGNoYWxsZW5nZQpkZXNj",
+    "tokens": 1157,
+    "lines": 231,
+    "bytes": 8733,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/change-reviewer.md": {
+    "hash": "LS0tCm5hbWU6IENoYW5nZSBSZXZpZXdl",
+    "tokens": 1078,
+    "lines": 296,
+    "bytes": 7456,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/code-garbage-collector.md": {
+    "hash": "LS0tCm5hbWU6IGNvZGUtZ2FyYmFnZS1j",
+    "tokens": 1528,
+    "lines": 426,
+    "bytes": 10834,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/code-quality.md": {
+    "hash": "LS0tCm5hbWU6IGNvZGUtcXVhbGl0eQpk",
+    "tokens": 1371,
+    "lines": 411,
+    "bytes": 10037,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/commit-suggester.md": {
+    "hash": "LS0tCm5hbWU6IENvbW1pdCBTdWdnZXN0",
+    "tokens": 854,
+    "lines": 256,
+    "bytes": 6012,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/commit.md": {
+    "hash": "LS0tCm5hbWU6IGNvbW1pdApkZXNjcmlw",
+    "tokens": 571,
+    "lines": 125,
+    "bytes": 4144,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/consensus.md": {
+    "hash": "LS0tCm5hbWU6IGNvbnNlbnN1cwpkZXNj",
+    "tokens": 1652,
+    "lines": 205,
+    "bytes": 11887,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/daily-standup.md": {
+    "hash": "LS0tCm5hbWU6IGRhaWx5LXN0YW5kdXAK",
+    "tokens": 3430,
+    "lines": 723,
+    "bytes": 25077,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/docgen.md": {
+    "hash": "LS0tCm5hbWU6IGRvY2dlbgpkZXNjcmlw",
+    "tokens": 162,
+    "lines": 49,
+    "bytes": 1224,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/explore.md": {
+    "hash": "LS0tCm5hbWU6IGV4cGxvcmUKZGVzY3Jp",
+    "tokens": 413,
+    "lines": 80,
+    "bytes": 3086,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/fix.md": {
+    "hash": "LS0tCm5hbWU6IGZpeApkZXNjcmlwdGlv",
+    "tokens": 414,
+    "lines": 101,
+    "bytes": 2771,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/git.md": {
+    "hash": "LS0tCm5hbWU6IGdpdApkZXNjcmlwdGlv",
+    "tokens": 2007,
+    "lines": 433,
+    "bytes": 14617,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/git/commit-advisory.md": {
+    "hash": "LS0tCm5hbWU6IGdpdC9jb21taXQtYWR2",
+    "tokens": 734,
+    "lines": 220,
+    "bytes": 5268,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/git/workflows/issue.md": {
+    "hash": "LS0tCm5hbWU6IGlzc3VlCmRlc2NyaXB0",
+    "tokens": 985,
+    "lines": 245,
+    "bytes": 6888,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/git/workflows/pr.md": {
+    "hash": "LS0tCm5hbWU6IHByCmRlc2NyaXB0aW9u",
+    "tokens": 637,
+    "lines": 180,
+    "bytes": 4586,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/git/workflows/release.md": {
+    "hash": "LS0tCm5hbWU6IHJlbGVhc2UKZGVzY3Jp",
+    "tokens": 1553,
+    "lines": 461,
+    "bytes": 10678,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/git/workflows/report.md": {
+    "hash": "LS0tCm5hbWU6IHJlcG9ydApkZXNjcmlw",
+    "tokens": 1453,
+    "lines": 343,
+    "bytes": 11268,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/implementor.md": {
+    "hash": "LS0tCm5hbWU6IGltcGxlbWVudG9yCmRl",
+    "tokens": 1004,
+    "lines": 162,
+    "bytes": 7673,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/install.md": {
+    "hash": "LS0tCm5hbWU6IGluc3RhbGwKZGVzY3Jp",
+    "tokens": 2042,
+    "lines": 516,
+    "bytes": 15893,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/issue-creator.md": {
+    "hash": "LS0tCm5hbWU6IElzc3VlIENyZWF0b3IK",
+    "tokens": 1022,
+    "lines": 345,
+    "bytes": 7241,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/polish.md": {
+    "hash": "LS0tCm5hbWU6IHBvbGlzaApkZXNjcmlw",
+    "tokens": 604,
+    "lines": 117,
+    "bytes": 4753,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/qa.md": {
+    "hash": "LS0tCm5hbWU6IHFhCmRlc2NyaXB0aW9u",
+    "tokens": 2430,
+    "lines": 654,
+    "bytes": 19845,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/refactor.md": {
+    "hash": "LS0tCm5hbWU6IHJlZmFjdG9yCmRlc2Ny",
+    "tokens": 1729,
+    "lines": 295,
+    "bytes": 13862,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/release.md": {
+    "hash": "LS0tCm5hbWU6IHJlbGVhc2UKZGVzY3Jp",
+    "tokens": 3597,
+    "lines": 1130,
+    "bytes": 28588,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/roadmap.md": {
+    "hash": "LS0tCm5hbWU6IHJvYWRtYXAKZGVzY3Jp",
+    "tokens": 3838,
+    "lines": 886,
+    "bytes": 28518,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/tests.md": {
+    "hash": "LS0tCm5hbWU6IHRlc3RzCmRlc2NyaXB0",
+    "tokens": 3433,
+    "lines": 558,
+    "bytes": 25711,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/tracer.md": {
+    "hash": "LS0tCm5hbWU6IHRyYWNlcgpkZXNjcmlw",
+    "tokens": 164,
+    "lines": 51,
+    "bytes": 1325,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/update/upstream-update.md": {
+    "hash": "LS0tCm5hbWU6IHVwc3RyZWFtLXVwZGF0",
+    "tokens": 271,
+    "lines": 86,
+    "bytes": 2010,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/update/versions/generic-update.md": {
+    "hash": "LS0tCm5hbWU6IGdlbmVyaWMtdXBkYXRl",
+    "tokens": 1039,
+    "lines": 306,
+    "bytes": 7383,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/agents/vibe.md": {
+    "hash": "LS0tCm5hbWU6IHNsZWVweQpkZXNjcmlw",
+    "tokens": 4401,
+    "lines": 1318,
+    "bytes": 35495,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/agent-configuration.md": {
+    "hash": "LS0tCm5hbWU6IEFnZW50IENvbmZpZ3Vy",
+    "tokens": 254,
+    "lines": 59,
+    "bytes": 2269,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/automated-rc-publishing.md": {
+    "hash": "LS0tCm5hbWU6IEF1dG9tYXRlZCBSQyBQ",
+    "tokens": 402,
+    "lines": 107,
+    "bytes": 2631,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/branch-tracker-guidance.md": {
+    "hash": "LS0tCm5hbWU6IEJyYW5jaCAmIFRyYWNr",
+    "tokens": 103,
+    "lines": 29,
+    "bytes": 746,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/debug.md": {
+    "hash": "LS0tCm5hbWU6IERlYnVnIChTeXN0ZW1h",
+    "tokens": 1727,
+    "lines": 321,
+    "bytes": 12523,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/emoji-naming-convention.md": {
+    "hash": "IyDwn46oIEVtb2ppIE5hbWluZyBDb252",
+    "tokens": 1182,
+    "lines": 304,
+    "bytes": 8033,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/evidence-storage.md": {
+    "hash": "LS0tCm5hbWU6IEV2aWRlbmNlICYgU3Rv",
+    "tokens": 195,
+    "lines": 27,
+    "bytes": 1377,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/file-naming-rules.md": {
+    "hash": "LS0tCm5hbWU6IEZpbGUgYW5kIE5hbWlu",
+    "tokens": 160,
+    "lines": 36,
+    "bytes": 1254,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/forge-code-blueprints.md": {
+    "hash": "LS0tCm5hbWU6IEZvcmdlIEJsdWVwcmlu",
+    "tokens": 755,
+    "lines": 196,
+    "bytes": 5923,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/genie-integration.md": {
+    "hash": "LS0tCm5hbWU6IEdlbmllIEludGVncmF0",
+    "tokens": 934,
+    "lines": 154,
+    "bytes": 7403,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/publishing-protocol.md": {
+    "hash": "LS0tCm5hbWU6IFB1Ymxpc2hpbmcgUHJv",
+    "tokens": 334,
+    "lines": 62,
+    "bytes": 2431,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/team-consultation-protocol.md": {
+    "hash": "LS0tCm5hbWU6IFRlYW0gQ29uc3VsdGF0",
+    "tokens": 987,
+    "lines": 285,
+    "bytes": 7649,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/tool-requirements.md": {
+    "hash": "LS0tCm5hbWU6IFRvb2wgUmVxdWlyZW1l",
+    "tokens": 70,
+    "lines": 21,
+    "bytes": 536,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/spells/triad-maintenance-protocol.md": {
+    "hash": "LS0tCm5hbWU6IFRyaWFkIE1haW50ZW5h",
+    "tokens": 699,
+    "lines": 155,
+    "bytes": 5203,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/teams/tech-council/council.md": {
+    "hash": "LS0tCm5hbWU6IFRlY2ggQ291bmNpbApk",
+    "tokens": 1158,
+    "lines": 329,
+    "bytes": 8920,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/teams/tech-council/jt.md": {
+    "hash": "LS0tCm5hbWU6IGp0CmRlc2NyaXB0aW9u",
+    "tokens": 1185,
+    "lines": 353,
+    "bytes": 7634,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/teams/tech-council/nayr.md": {
+    "hash": "LS0tCm5hbWU6IG5heXIKZGVzY3JpcHRp",
+    "tokens": 1331,
+    "lines": 306,
+    "bytes": 8489,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/code/teams/tech-council/oettam.md": {
+    "hash": "LS0tCm5hbWU6IG9ldHRhbQpkZXNjcmlw",
+    "tokens": 1517,
+    "lines": 376,
+    "bytes": 9782,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/neurons/forge.md": {
+    "hash": "LS0tCm5hbWU6IEZPUkdFCmRlc2NyaXB0",
+    "tokens": 481,
+    "lines": 107,
+    "bytes": 3725,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/neurons/genie.md": {
+    "hash": "LS0tCm5hbWU6IEdFTklFCmRlc2NyaXB0",
+    "tokens": 250,
+    "lines": 64,
+    "bytes": 1938,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/neurons/README.md": {
+    "hash": "IyBHZW5pZSBOZXVyb24gQXJjaGl0ZWN0",
+    "tokens": 693,
+    "lines": 194,
+    "bytes": 5647,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/neurons/review.md": {
+    "hash": "LS0tCm5hbWU6IFJFVklFVwpkZXNjcmlw",
+    "tokens": 483,
+    "lines": 107,
+    "bytes": 3716,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/neurons/wish.md": {
+    "hash": "LS0tCm5hbWU6IFdJU0gKZGVzY3JpcHRp",
+    "tokens": 469,
+    "lines": 105,
+    "bytes": 3618,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/cli-automation.md": {
+    "hash": "IyBHZW5pZSBDTEkgQXV0b21hdGlvbiBH",
+    "tokens": 1232,
+    "lines": 360,
+    "bytes": 7845,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/environment.md": {
+    "hash": "IyBHZW5pZSBEZXYgRW52aXJvbm1lbnQg",
+    "tokens": 315,
+    "lines": 61,
+    "bytes": 2725,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/mission.md": {
+    "hash": "IyBHZW5pZSBEZXYgTWlzc2lvbgojIyBQ",
+    "tokens": 454,
+    "lines": 61,
+    "bytes": 3352,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/README.md": {
+    "hash": "IyBQcm9kdWN0IERvY3MgSW5kZXgKCgpV",
+    "tokens": 136,
+    "lines": 21,
+    "bytes": 1065,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/roadmap.md": {
+    "hash": "IyBHZW5pZSBEZXYgUm9hZG1hcApUaGUg",
+    "tokens": 406,
+    "lines": 45,
+    "bytes": 2768,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/tech-stack.md": {
+    "hash": "IyBHZW5pZSBEZXYgVGVjaG5pY2FsIFN0",
+    "tokens": 283,
+    "lines": 35,
+    "bytes": 2246,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/templates/context-template.md": {
+    "hash": "IyDwn6eeIEdlbmllIENvbnRleHQ6IHt7",
+    "tokens": 721,
+    "lines": 219,
+    "bytes": 4889,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/templates/qa-done-report-template.md": {
+    "hash": "IyBEb25lIFJlcG9ydDogcWEtPHNsdWc+",
+    "tokens": 239,
+    "lines": 69,
+    "bytes": 1679,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/templates/review-report-template.md": {
+    "hash": "IyBXaXNoIFJldmlldyDigJMge1dpc2gg",
+    "tokens": 577,
+    "lines": 90,
+    "bytes": 3862,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/product/templates/wish-template.md": {
+    "hash": "IyDwn6eeIHtGRUFUVVJFIE5BTUV9IFdJ",
+    "tokens": 704,
+    "lines": 121,
+    "bytes": 4430,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/scripts/hooks/README.md": {
+    "hash": "IyBHZW5pZSBHaXQgSG9va3MgU3lzdGVt",
+    "tokens": 372,
+    "lines": 94,
+    "bytes": 2873,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/ace-protocol.md": {
+    "hash": "IyBBQ0UgUHJvdG9jb2wgLSBFdmlkZW5j",
+    "tokens": 464,
+    "lines": 119,
+    "bytes": 3411,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/ask-one-at-a-time.md": {
+    "hash": "LS0tCm5hbWU6IFNlcXVlbnRpYWwgUXVl",
+    "tokens": 809,
+    "lines": 176,
+    "bytes": 5543,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/backup-analyzer.md": {
+    "hash": "LS0tCm5hbWU6IEJhY2t1cCBBbmFseXpl",
+    "tokens": 1988,
+    "lines": 543,
+    "bytes": 15412,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/blocker.md": {
+    "hash": "LS0tCm5hbWU6IEJsb2NrZXIgUHJvdG9j",
+    "tokens": 52,
+    "lines": 13,
+    "bytes": 351,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/break-things-move-fast.md": {
+    "hash": "LS0tCm5hbWU6IE5vIEJhY2t3YXJkcyBD",
+    "tokens": 312,
+    "lines": 57,
+    "bytes": 2186,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/context-candidates.md": {
+    "hash": "LS0tCm5hbWU6IENvbnRleHQgQ2FuZGlk",
+    "tokens": 324,
+    "lines": 73,
+    "bytes": 2305,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/context-critic.md": {
+    "hash": "LS0tCm5hbWU6IENvbnRleHQgQ3JpdGlj",
+    "tokens": 230,
+    "lines": 52,
+    "bytes": 1692,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/defer-to-expertise.md": {
+    "hash": "LS0tCm5hbWU6IERlZmVyIHRvIEV4cGVy",
+    "tokens": 1196,
+    "lines": 279,
+    "bytes": 9308,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/delegate-dont-do.md": {
+    "hash": "LS0tCm5hbWU6IERlbGVnYXRlLCBEb24n",
+    "tokens": 1883,
+    "lines": 293,
+    "bytes": 14858,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/error-investigation-protocol.md": {
+    "hash": "LS0tCm5hbWU6IEVycm9yIEludmVzdGln",
+    "tokens": 1292,
+    "lines": 329,
+    "bytes": 9498,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/evidence-based-completion.md": {
+    "hash": "LS0tCm5hbWU6IEV2aWRlbmNlLUJhc2Vk",
+    "tokens": 1234,
+    "lines": 274,
+    "bytes": 9575,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/experiment.md": {
+    "hash": "LS0tCm5hbWU6IEV4cGVyaW1lbnRhdGlv",
+    "tokens": 307,
+    "lines": 66,
+    "bytes": 2330,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/file-creation-protocol.md": {
+    "hash": "LS0tCm5hbWU6IEZpbGUgQ3JlYXRpb24g",
+    "tokens": 997,
+    "lines": 230,
+    "bytes": 6980,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/forge-integration.md": {
+    "hash": "LS0tCm5hbWU6IEZvcmdlIEludGVncmF0",
+    "tokens": 1525,
+    "lines": 282,
+    "bytes": 12691,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/forge-orchestration.md": {
+    "hash": "LS0tCm5hbWU6IEZvcmdlIE9yY2hlc3Ry",
+    "tokens": 2417,
+    "lines": 515,
+    "bytes": 19566,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/gather-context.md": {
+    "hash": "LS0tCm5hbWU6IEdlbmllIE1pc3Npbmcg",
+    "tokens": 70,
+    "lines": 19,
+    "bytes": 523,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/global-health-check.md": {
+    "hash": "LS0tCm5hbWU6IGZvcmdlLWdsb2JhbC1o",
+    "tokens": 103,
+    "lines": 35,
+    "bytes": 806,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/global-noop-roundtrip.md": {
+    "hash": "LS0tCm5hbWU6IGZvcmdlLWdsb2JhbC1u",
+    "tokens": 68,
+    "lines": 26,
+    "bytes": 576,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/install-genie.md": {
+    "hash": "LS0tCm5hbWU6IEluc3RhbGwgR2VuaWUg",
+    "tokens": 4523,
+    "lines": 1233,
+    "bytes": 36968,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/install.md": {
+    "hash": "LS0tCm5hbWU6IGluc3RhbGwKZGVzY3Jp",
+    "tokens": 347,
+    "lines": 83,
+    "bytes": 2717,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/investigate-before-commit.md": {
+    "hash": "LS0tCm5hbWU6IEludmVzdGlnYXRlIEJl",
+    "tokens": 512,
+    "lines": 113,
+    "bytes": 3869,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/know-yourself.md": {
+    "hash": "LS0tCm5hbWU6IEtub3cgWW91cnNlbGYg",
+    "tokens": 1674,
+    "lines": 289,
+    "bytes": 13220,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/learn.md": {
+    "hash": "LS0tCm5hbWU6IExlYXJuIChNYXN0ZXIg",
+    "tokens": 4518,
+    "lines": 829,
+    "bytes": 35093,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/mcp-diagnostic-protocol.md": {
+    "hash": "LS0tCm5hbWU6IE1DUCBEaWFnbm9zdGlj",
+    "tokens": 906,
+    "lines": 247,
+    "bytes": 6727,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/mcp-first.md": {
+    "hash": "LS0tCm5hbWU6IE1DUCBGaXJzdCAoVG9v",
+    "tokens": 468,
+    "lines": 125,
+    "bytes": 3610,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/multi-step-execution.md": {
+    "hash": "LS0tCm5hbWU6IEV4ZWN1dGlvbiBJbnRl",
+    "tokens": 383,
+    "lines": 68,
+    "bytes": 2725,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/orchestration-boundary-protocol.md": {
+    "hash": "IyDwn5OYIE9yY2hlc3RyYXRpb24gQm91",
+    "tokens": 1325,
+    "lines": 257,
+    "bytes": 10122,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/orchestrator-not-implementor.md": {
+    "hash": "LS0tCm5hbWU6IE9yY2hlc3RyYXRvciBO",
+    "tokens": 1185,
+    "lines": 190,
+    "bytes": 9495,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/prompt.md": {
+    "hash": "LS0tCm5hbWU6IHByb21wdApkZXNjcmlw",
+    "tokens": 8270,
+    "lines": 747,
+    "bytes": 54685,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/README.md": {
+    "hash": "CiMgRm9yZ2UgV29ya2Zsb3dzIChHbG9i",
+    "tokens": 48,
+    "lines": 10,
+    "bytes": 364,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/reflect.md": {
+    "hash": "LS0tCm5hbWU6IFJlZmxlY3QgKERlZGlj",
+    "tokens": 1639,
+    "lines": 405,
+    "bytes": 12406,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/routing-decision-matrix.md": {
+    "hash": "LS0tCm5hbWU6IFJvdXRpbmcgRGVjaXNp",
+    "tokens": 2131,
+    "lines": 369,
+    "bytes": 17001,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/run-in-parallel.md": {
+    "hash": "LS0tCm5hbWU6IFBhcmFsbGVsIEV4ZWN1",
+    "tokens": 51,
+    "lines": 13,
+    "bytes": 375,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/session-state-updater-example.md": {
+    "hash": "IyBFeGFtcGxlOiBJbXBsZW1lbnRvciBB",
+    "tokens": 617,
+    "lines": 197,
+    "bytes": 5696,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/session-state-updater.md": {
+    "hash": "LS0tCm5hbWU6IHNlc3Npb24tc3RhdGUt",
+    "tokens": 637,
+    "lines": 221,
+    "bytes": 5381,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/track-long-running-tasks.md": {
+    "hash": "LS0tCm5hbWU6IFBlcnNpc3RlbnQgVHJh",
+    "tokens": 544,
+    "lines": 134,
+    "bytes": 4222,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/troubleshoot-infrastructure.md": {
+    "hash": "LS0tCm5hbWU6IFRyb3VibGVzaG9vdCBJ",
+    "tokens": 764,
+    "lines": 177,
+    "bytes": 5618,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/upgrade-genie.md": {
+    "hash": "IyBVcGdyYWRlIEdlbmllIEZyYW1ld29y",
+    "tokens": 1249,
+    "lines": 416,
+    "bytes": 10279,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/url-presentation-protocol.md": {
+    "hash": "LS0tCm5hbWU6IFVSTCBQcmVzZW50YXRp",
+    "tokens": 1094,
+    "lines": 302,
+    "bytes": 8881,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/wish-initiation.md": {
+    "hash": "IyBSdWxlICMyOiBXaXNoIEluaXRpYXRp",
+    "tokens": 750,
+    "lines": 159,
+    "bytes": 4837,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/wish-issue-linkage.md": {
+    "hash": "IyBSdWxlICM2OiBXaXNoLUlzc3VlIExp",
+    "tokens": 1436,
+    "lines": 411,
+    "bytes": 10420,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".genie/spells/wish-lifecycle.md": {
+    "hash": "LS0tCm5hbWU6IFdpc2ggRG9jdW1lbnQg",
+    "tokens": 490,
+    "lines": 101,
+    "bytes": 3795,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  ".worktrees/003-qa-trailing-issue/.auto-claude/specs/003-qa-trailing-issue/spec.md": {
+    "hash": "IyBTcGVjaWZpY2F0aW9uOiBGaXggQnli",
+    "tokens": 1271,
+    "lines": 223,
+    "bytes": 8578,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  "AGENTS.md": {
+    "hash": "IyBHZW5pZSBBZ2VudCBGcmFtZXdvcmsK",
+    "tokens": 2034,
+    "lines": 423,
+    "bytes": 15457,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  "CLAUDE.md": {
+    "hash": "QEFHRU5UUy5tZAoxMUBBR0VOVFMubWQK",
+    "tokens": 1,
+    "lines": 2,
+    "bytes": 11,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  "docs/TLS_SETUP.md": {
+    "hash": "IyDQndCw0YHRgtGA0L7QudC60LAg0YjQ",
+    "tokens": 951,
+    "lines": 364,
+    "bytes": 11215,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  "README.md": {
+    "hash": "IyBUcmFkZVRlcm1pbmFsCgrQotC+0YDQ",
+    "tokens": 661,
+    "lines": 186,
+    "bytes": 5563,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  "target/debug/build/rust_decimal-64cdd7775063e77a/out/README-lib.md": {
+    "hash": "CkEgRGVjaW1hbCBudW1iZXIgaW1wbGVt",
+    "tokens": 1947,
+    "lines": 470,
+    "bytes": 15893,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  "target/release/build/rust_decimal-d174b3efe415951d/out/README-lib.md": {
+    "hash": "CkEgRGVjaW1hbCBudW1iZXIgaW1wbGVt",
+    "tokens": 1947,
+    "lines": 470,
+    "bytes": 15893,
+    "method": "approx",
+    "encoding": "approx-words"
+  },
+  "__meta": {
+    "timestamp": 1767999833269
+  }
+}
