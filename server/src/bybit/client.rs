@@ -451,6 +451,23 @@ impl BybitClient {
         Ok(())
     }
 
+    pub async fn switch_to_hedge_mode(&self) -> Result<()> {
+        #[derive(Serialize)]
+        struct SwitchModeRequest {
+            category: String,
+            mode: u8,
+        }
+
+        let body = SwitchModeRequest {
+            category: "linear".to_string(),
+            mode: 3,
+        };
+
+        let _: serde_json::Value = self.post("/v5/position/switch-mode", &body).await?;
+        tracing::info!("Switched to hedge mode (mode=3)");
+        Ok(())
+    }
+
     async fn get_public<T: for<'de> Deserialize<'de> + Default>(&self, endpoint: &str, params: &str) -> Result<T> {
         let url = format!("{}{}?{}", self.base_url, endpoint, params);
         tracing::debug!("GET (public) {}", url);
