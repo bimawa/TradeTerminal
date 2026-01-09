@@ -1424,6 +1424,9 @@ impl App {
                 ServerPayload::OrderError { message } => {
                     self.messages.push(format!("Order error: {}", message));
                 }
+                ServerPayload::PositionModeChanged { from_mode, to_mode } => {
+                    self.messages.push(format!("Position mode switched: {} → {}", from_mode, to_mode));
+                }
                 ServerPayload::Error { code, message } => {
                     self.messages.push(format!("Error {}: {}", code, message));
                 }

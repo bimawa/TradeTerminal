@@ -73,6 +73,7 @@ pub enum ServerPayload {
     Connected,
     Disconnected,
     ChartSubscribed,
+    PositionModeChanged { from_mode: String, to_mode: String },
     Pong,
     Error { code: u32, message: String },
 }
@@ -151,6 +152,7 @@ impl ServerPayload {
             Self::Connected => MessageType::Connected,
             Self::Disconnected => MessageType::Disconnected,
             Self::ChartSubscribed => MessageType::ChartSubscribed,
+            Self::PositionModeChanged { .. } => MessageType::PositionModeChanged,
             Self::Pong => MessageType::Pong,
             Self::Error { .. } => MessageType::Error,
         }

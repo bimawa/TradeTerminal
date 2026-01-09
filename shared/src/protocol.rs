@@ -51,6 +51,7 @@ pub enum MessageType {
     PanicStopActivated = 25,
     Connected = 26,
     ChartSubscribed = 27,
+    PositionModeChanged = 28,
 
     GetPositions = 50,
     GetOrders = 51,
@@ -105,6 +106,7 @@ impl MessageType {
             25 => Ok(Self::PanicStopActivated),
             26 => Ok(Self::Connected),
             27 => Ok(Self::ChartSubscribed),
+            28 => Ok(Self::PositionModeChanged),
 
             50 => Ok(Self::GetPositions),
             51 => Ok(Self::GetOrders),

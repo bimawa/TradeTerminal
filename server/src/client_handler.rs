@@ -22,13 +22,66 @@ impl ClientHandler {
 
     pub async fn handle(&self, msg: ClientMessage, tx: &mpsc::Sender<ServerMessage>) -> Result<()> {
         let response = match msg.payload {
-            ClientPayload::PlaceOrder(req) => match self.bybit.place_order(&req).await {
-                Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
-                Err(e) => {
-                    tracing::error!("Failed to place order for {}: {:#}", req.symbol, e);
-                    ServerMessage::new(ServerPayload::OrderError {
-                        message: format!("Failed to place {:?} order for {}: {}", req.order_type, req.symbol, e),
-                    })
+            ClientPayload::PlaceOrder(req) => {
+                match self.bybit.place_order(&req).await {
+                    Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        if err_str.contains("10001") && err_str.contains("position idx not match position mode") {
+                            match self.bybit.get_position_mode().await {
+                                Ok(current_mode) => {
+                                    let mode_name = match current_mode {
+                                        0 => "One-Way",
+                                        3 => "Hedge",
+                                        _ => "Unknown",
+                                    };
+                                    if current_mode != 3 {
+                                        tracing::warn!("Position mode is {} ({}), switching to Hedge mode...", mode_name, current_mode);
+                                        match self.bybit.switch_to_hedge_mode().await {
+                                            Ok(_) => {
+                                                let notification = ServerMessage::new(ServerPayload::PositionModeChanged {
+                                                    from_mode: mode_name.to_string(),
+                                                    to_mode: "Hedge".to_string(),
+                                                });
+                                                let _ = tx.send(notification).await;
+
+                                                match self.bybit.place_order(&req).await {
+                                                    Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
+                                                    Err(retry_err) => {
+                                                        tracing::error!("Failed to place order after mode switch: {:#}", retry_err);
+                                                        ServerMessage::new(ServerPayload::OrderError {
+                                                            message: format!("Failed to place {:?} order for {} after switching to Hedge mode: {}", req.order_type, req.symbol, retry_err),
+                                                        })
+                                                    }
+                                                }
+                                            }
+                                            Err(switch_err) => {
+                                                tracing::error!("Failed to switch to hedge mode: {:#}", switch_err);
+                                                ServerMessage::new(ServerPayload::OrderError {
+                                                    message: format!("Position mode is {}, but failed to switch to Hedge mode: {}", mode_name, switch_err),
+                                                })
+                                            }
+                                        }
+                                    } else {
+                                        ServerMessage::new(ServerPayload::OrderError {
+                                            message: format!("Failed to place {:?} order for {}: {}", req.order_type, req.symbol, e),
+                                        })
+                                    }
+                                }
+                                Err(mode_err) => {
+                                    tracing::error!("Failed to get position mode: {:#}", mode_err);
+                                    ServerMessage::new(ServerPayload::OrderError {
+                                        message: format!("Position mode error (10001). Failed to check current mode: {}", mode_err),
+                                    })
+                                }
+                            }
+                        } else {
+                            tracing::error!("Failed to place order for {}: {:#}", req.symbol, e);
+                            ServerMessage::new(ServerPayload::OrderError {
+                                message: format!("Failed to place {:?} order for {}: {}", req.order_type, req.symbol, e),
+                            })
+                        }
+                    }
                 }
             },
 

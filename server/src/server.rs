@@ -31,10 +31,6 @@ pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
     let bybit_client = Arc::new(BybitClient::new(&config));
     let bybit_ws = Arc::new(BybitWebSocket::new(&config));
 
-    if let Err(e) = bybit_client.switch_to_hedge_mode().await {
-        tracing::warn!(error = %e, "Failed to switch to hedge mode (may already be in hedge mode)");
-    }
-
     let tls_acceptor = if config.tls_enabled {
         let tls_config = tls::load_tls_config(
             config.tls_cert_path.as_ref().context("TLS_CERT_PATH required when TLS_ENABLED=true")?,
