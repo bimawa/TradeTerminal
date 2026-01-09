@@ -245,7 +245,7 @@ impl BybitClient {
                 OrderType::Limit => "Limit".to_string(),
             },
             qty: req.quantity.to_string(),
-            price: req.price.map(|p| p.to_string()),
+            price: req.price.map(|p| p.round_dp(10).to_string()),
             time_in_force: match req.time_in_force {
                 trade_shared::TimeInForce::Gtc => "GTC".to_string(),
                 trade_shared::TimeInForce::Ioc => "IOC".to_string(),
@@ -257,8 +257,8 @@ impl BybitClient {
                 Side::Sell => 2,
             }),
             reduce_only: req.reduce_only,
-            take_profit: req.take_profit.map(|p| p.to_string()),
-            stop_loss: req.stop_loss.map(|p| p.to_string()),
+            take_profit: req.take_profit.map(|p| p.round_dp(10).to_string()),
+            stop_loss: req.stop_loss.map(|p| p.round_dp(10).to_string()),
         };
 
         let result: OrderResult = self.post("/v5/order/create", &body).await?;
@@ -443,8 +443,8 @@ impl BybitClient {
             category: "linear".to_string(),
             symbol: symbol.0.clone(),
             position_idx,
-            trailing_stop: trailing_stop.to_string(),
-            active_price: active_price.map(|p| p.to_string()),
+            trailing_stop: trailing_stop.round_dp(10).to_string(),
+            active_price: active_price.map(|p| p.round_dp(10).to_string()),
         };
 
         let _: serde_json::Value = self.post("/v5/position/trading-stop", &body).await?;
