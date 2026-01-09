@@ -762,17 +762,6 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
             None
         };
 
-        let diff_percent = if let Some(current_price) = app.last_price {
-            if !current_price.is_zero() {
-                ((price - current_price) / current_price) * Decimal::from(100)
-            } else {
-                Decimal::ZERO
-            }
-        } else {
-            Decimal::ZERO
-        };
-        let sign = if diff_percent >= Decimal::ZERO { "+" } else { "" };
-
         let is_mouse_line = if let Some(mp) = mouse_price {
             (price - mp).abs() <= range / Decimal::from(available_lines * 2)
         } else {
@@ -780,10 +769,35 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
         };
 
         let spans = if is_mouse_line {
-            let percent_str = format!("{}{:.2}%", sign, diff_percent);
-            let price_aligned = format!("{:>width$}", price_str, width = price_width);
+            let mouse_price_val = mouse_price.unwrap();
+            let mouse_diff_percent = if let Some(current_price) = app.last_price {
+                if !current_price.is_zero() {
+                    ((mouse_price_val - current_price) / current_price) * Decimal::from(100)
+                } else {
+                    Decimal::ZERO
+                }
+            } else {
+                Decimal::ZERO
+            };
+            let mouse_sign = if mouse_diff_percent >= Decimal::ZERO { "+" } else { "" };
+            let mouse_percent_str = format!("{}{:.2}%", mouse_sign, mouse_diff_percent);
+
+            let mouse_price_str = {
+                let price_rounded = mouse_price_val.round_dp(10);
+                let price_string = price_rounded.to_string();
+
+                if let Some(dot_idx) = price_string.find('.') {
+                    let int_part = &price_string[..dot_idx];
+                    let frac_part = &price_string[dot_idx + 1..];
+                    format!("{}.{:0<10}", int_part, frac_part)
+                } else {
+                    format!("{}.{:0<10}", price_string, "")
+                }
+            };
+
+            let mouse_price_aligned = format!("{:>width$}", mouse_price_str, width = price_width);
             vec![Span::styled(
-                format!("{} {}", percent_str, price_aligned),
+                format!("{} {}", mouse_percent_str, mouse_price_aligned),
                 Style::default().fg(Color::White).bg(Color::DarkGray).add_modifier(Modifier::BOLD),
             )]
         } else if let Some(color) = pnl_highlight_color {
