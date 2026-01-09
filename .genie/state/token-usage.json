@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-09T23:05:17.818Z",
+  "generatedAt": "2026-01-09T23:16:30.882Z",
   "encoding": "approx-words",
   "files": [
     {
@@ -892,6 +892,13 @@
       "method": "approx"
     },
     {
+      "path": ".genie/state/token-usage.md",
+      "tokens": 154,
+      "lines": 37,
+      "bytes": 1573,
+      "method": "approx"
+    },
+    {
       "path": ".genie/product/README.md",
       "tokens": 136,
       "lines": 21,
@@ -991,7 +998,7 @@
     }
   ],
   "totals": {
-    "files": 141,
-    "tokens": 156317
+    "files": 142,
+    "tokens": 156471
   }
 }
