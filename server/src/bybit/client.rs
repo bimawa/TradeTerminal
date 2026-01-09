@@ -456,15 +456,17 @@ impl BybitClient {
         struct SwitchModeRequest {
             category: String,
             mode: u8,
+            coin: String,
         }
 
         let body = SwitchModeRequest {
             category: "linear".to_string(),
             mode: 3,
+            coin: "USDT".to_string(),
         };
 
         let _: serde_json::Value = self.post("/v5/position/switch-mode", &body).await?;
-        tracing::info!("Switched to hedge mode (mode=3)");
+        tracing::info!("Switched to hedge mode (mode=3) for USDT");
         Ok(())
     }
 
