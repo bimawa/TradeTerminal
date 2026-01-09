@@ -350,10 +350,20 @@ impl App {
                 _ => {}
             },
             InputMode::Command => {
-                let ctrl_or_alt = key.modifiers.contains(KeyModifiers::CONTROL)
-                    || key.modifiers.contains(KeyModifiers::ALT);
+                let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+                let ctrl_or_alt = ctrl || key.modifiers.contains(KeyModifiers::ALT);
 
                 match key.code {
+                    KeyCode::Char('c') if ctrl => {
+                        if !self.input.is_empty() {
+                            self.command_history.push(self.input.clone());
+                            self.save_history();
+                        }
+                        self.input_mode = InputMode::Normal;
+                        self.input.clear();
+                        self.input_cursor = 0;
+                        self.history_index = None;
+                    }
                     KeyCode::Esc => {
                         self.input_mode = InputMode::Normal;
                         self.input.clear();
