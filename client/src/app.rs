@@ -521,11 +521,18 @@ impl App {
                         && mouse.row < chart_area.y + chart_area.height
                     {
                         if let Some(price) = self.get_price_at_mouse(mouse.column, mouse.row) {
-                            if let Some(ref mut cb) = self.clipboard {
-                                let price_rounded = price.round_dp(10);
-                                let price_str = price_rounded.to_string();
-                                if cb.set_text(price_str.clone()).is_ok() {
-                                    self.messages.push(format!("Copied: {}", price_str));
+                            let price_rounded = price.round_dp(10);
+                            let price_str = price_rounded.to_string();
+
+                            if self.input_mode == InputMode::Command {
+                                self.input.push_str(&price_str);
+                                self.input_cursor = self.input.len();
+                                self.messages.push(format!("Price inserted: {}", price_str));
+                            } else {
+                                if let Some(ref mut cb) = self.clipboard {
+                                    if cb.set_text(price_str.clone()).is_ok() {
+                                        self.messages.push(format!("Copied: {}", price_str));
+                                    }
                                 }
                             }
                         }
