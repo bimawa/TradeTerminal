@@ -235,7 +235,7 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
             Span::raw(" Trailing Stop"),
         ]),
         Line::from(vec![
-            Span::styled("  ━", Style::default().fg(Color::LightMagenta)),
+            Span::styled("  ━", Style::default().fg(Color::LightRed)),
             Span::raw(" Activity Stop"),
         ]),
         Line::from(vec![
@@ -485,7 +485,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                         y1: ps_y,
                         x2: x_end,
                         y2: ps_y,
-                        color: Color::LightMagenta,
+                        color: Color::LightRed,
                     });
                 }
             }
