@@ -215,6 +215,7 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
         Line::from("  +/-     Zoom horizontal"),
         Line::from("  [/]     Zoom vertical"),
         Line::from("  0       Reset view"),
+        Line::from("  1       Toggle tracking"),
         Line::from(""),
         Line::from(Span::styled(" Chart Lines", Style::default().add_modifier(Modifier::BOLD))),
         Line::from(""),
