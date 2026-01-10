@@ -235,6 +235,10 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
             Span::raw(" Trailing Stop"),
         ]),
         Line::from(vec![
+            Span::styled("  ━", Style::default().fg(Color::LightYellow)),
+            Span::raw(" Panic Stop"),
+        ]),
+        Line::from(vec![
             Span::styled("  ━", Style::default().fg(Color::Cyan)),
             Span::raw(" Buy Order"),
         ]),
@@ -469,6 +473,20 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                             });
                         }
                     }
+                }
+            }
+
+            if let Some(ps_price) = app.panic_stop_trigger_price {
+                let x_end = (visible_count * (candle_width + 1)) as f64;
+                let ps_y = dec_to_f64(ps_price);
+                if ps_y >= y_min && ps_y <= y_max {
+                    ctx.draw(&CanvasLine {
+                        x1: 0.0,
+                        y1: ps_y,
+                        x2: x_end,
+                        y2: ps_y,
+                        color: Color::LightYellow,
+                    });
                 }
             }
 
