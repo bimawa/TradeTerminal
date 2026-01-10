@@ -1176,7 +1176,7 @@ impl App {
         self.conn_tx.send(msg).await?;
 
         self.messages.push(format!(
-            "Setting TS: {} trigger@{:.2}, callback {:.2}",
+            "Setting TS: {} trigger@{}, callback {}",
             if position_side == Side::Buy { "LONG" } else { "SHORT" },
             active_price, trailing_stop
         ));
@@ -1230,7 +1230,7 @@ impl App {
         self.conn_tx.send(msg).await?;
 
         let trigger_str = trigger_price
-            .map(|p| format!(" trigger@{:.2}", p))
+            .map(|p| format!(" trigger@{}", p))
             .unwrap_or_default();
         self.messages.push(format!(
             "Setting activity stop: {} {}s{}",

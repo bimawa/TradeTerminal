@@ -903,8 +903,20 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
 
 fn draw_messages(f: &mut Frame, app: &App, area: Rect) {
     let visible_count = (area.height as usize).saturating_sub(2).min(8);
-    let start = app.messages.len().saturating_sub(visible_count);
-    
+
+    let start = if app.input_mode == InputMode::Copy {
+        let selected_idx = app.messages.len().saturating_sub(1 + app.copy_index);
+        if selected_idx < visible_count {
+            0
+        } else if selected_idx >= app.messages.len().saturating_sub(visible_count) {
+            app.messages.len().saturating_sub(visible_count)
+        } else {
+            selected_idx.saturating_sub(visible_count / 2)
+        }
+    } else {
+        app.messages.len().saturating_sub(visible_count)
+    };
+
     let messages: Vec<ListItem> = app
         .messages
         .iter()
@@ -913,7 +925,7 @@ fn draw_messages(f: &mut Frame, app: &App, area: Rect) {
         .map(|(i, m)| {
             let actual_idx = start + i;
             let reverse_idx = app.messages.len().saturating_sub(1 + actual_idx);
-            
+
             if app.input_mode == InputMode::Copy && reverse_idx == app.copy_index {
                 ListItem::new(Line::from(m.as_str()))
                     .style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
