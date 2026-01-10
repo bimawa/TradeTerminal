@@ -10,12 +10,12 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
 use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use trade_shared::{AuthMessage, ClientMessage, ClientPayload, OrderRequest, OrderType, PersistedPanicStopState, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
+use trade_shared::{AuthMessage, ClientMessage, ClientPayload, OrderRequest, OrderType, PersistedActivityStopState, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
 
 use crate::{auth, tls};
 
-pub struct PanicStopState {
-    pub persisted: PersistedPanicStopState,
+pub struct ActivityStopState {
+    pub persisted: PersistedActivityStopState,
     pub last_trade_time: Instant,
 }
 
@@ -121,7 +121,7 @@ async fn handle_connection(
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
     let bybit_for_timer = bybit.clone();
 
-    let initial_state = match db::load_all_panic_stops(&db) {
+    let initial_state = match db::load_all_activity_stops(&db) {
         Ok(states) => {
             if let Some(persisted) = states.into_iter().next() {
                 let current_timestamp = std::time::SystemTime::now()
@@ -150,7 +150,7 @@ async fn handle_connection(
                     "Restored panic stop state from database"
                 );
 
-                Some(PanicStopState {
+                Some(ActivityStopState {
                     persisted,
                     last_trade_time,
                 })
@@ -164,8 +164,8 @@ async fn handle_connection(
         }
     };
 
-    let panic_stop_state: Arc<Mutex<Option<PanicStopState>>> = Arc::new(Mutex::new(initial_state));
-    let handler = ClientHandler::new(bybit, panic_stop_state.clone(), db.clone());
+    let activity_stop_state: Arc<Mutex<Option<ActivityStopState>>> = Arc::new(Mutex::new(initial_state));
+    let handler = ClientHandler::new(bybit, activity_stop_state.clone(), db.clone());
 
     let connected_msg = ServerMessage::new(ServerPayload::Connected);
     let connected_json = serde_json::to_string(&connected_msg)
@@ -184,7 +184,7 @@ async fn handle_connection(
     });
 
     let tx_clone = tx.clone();
-    let panic_stop_for_ws = panic_stop_state.clone();
+    let activity_stop_for_ws = activity_stop_state.clone();
     let db_for_ws = db.clone();
     let ws_event_task = tokio::spawn(async move {
         while let Some(event) = ws_event_rx.recv().await {
@@ -201,7 +201,7 @@ async fn handle_connection(
                 WsEvent::PositionUpdate(data) => {
                     match serde_json::from_value::<Vec<trade_shared::Position>>(data.clone()) {
                         Ok(positions) => {
-                            let mut state_guard = panic_stop_for_ws.lock().await;
+                            let mut state_guard = activity_stop_for_ws.lock().await;
                             if let Some(ref state) = *state_guard {
                                 let matching_position = positions.iter().find(|p| {
                                     p.symbol == state.persisted.symbol && p.side == state.persisted.side
@@ -220,11 +220,11 @@ async fn handle_connection(
                                     );
                                     let symbol_clone = state.persisted.symbol.clone();
                                     let side_for_delete = state.persisted.side;
-                                    if let Err(e) = db::delete_panic_stop(&db_for_ws, &symbol_clone.0, side_for_delete) {
+                                    if let Err(e) = db::delete_activity_stop(&db_for_ws, &symbol_clone.0, side_for_delete) {
                                         tracing::warn!(error = %e, "Failed to delete panic stop from database");
                                     }
                                     *state_guard = None;
-                                    let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                                    let cancel_msg = ServerMessage::new(ServerPayload::ActivityStopStatus {
                                         symbol: symbol_clone,
                                         remaining_ms: 0,
                                         active: false,
@@ -255,7 +255,7 @@ async fn handle_connection(
 
     let (chart_event_tx, mut chart_event_rx) = mpsc::channel::<WsEvent>(100);
     let chart_tx = tx.clone();
-    let panic_stop_for_chart = panic_stop_state.clone();
+    let activity_stop_for_chart = activity_stop_state.clone();
     let chart_symbol_for_handler = chart_symbol.clone();
     let chart_event_task = tokio::spawn(async move {
         while let Some(event) = chart_event_rx.recv().await {
@@ -274,7 +274,7 @@ async fn handle_connection(
                     }
                     if let Some(trade_price) = last_trade_price {
                         let subscribed_symbol = chart_symbol_for_handler.lock().await.clone();
-                        let mut state_guard = panic_stop_for_chart.lock().await;
+                        let mut state_guard = activity_stop_for_chart.lock().await;
                         if let Some(ref mut state) = *state_guard {
                             if subscribed_symbol.as_ref() == Some(&state.persisted.symbol) {
                                 if let Some(trigger) = state.persisted.trigger_price {
@@ -330,7 +330,7 @@ async fn handle_connection(
     });
 
     let mut timer_interval = tokio::time::interval(Duration::from_millis(100));
-    let panic_stop_for_timer = panic_stop_state.clone();
+    let activity_stop_for_timer = activity_stop_state.clone();
     let tx_for_timer = tx.clone();
 
     loop {
@@ -386,13 +386,13 @@ async fn handle_connection(
                 }
             }
             _ = timer_interval.tick() => {
-                let mut state_guard = panic_stop_for_timer.lock().await;
+                let mut state_guard = activity_stop_for_timer.lock().await;
                 if let Some(ref mut state) = *state_guard {
                     if state.persisted.active {
                         let elapsed = state.last_trade_time.elapsed().as_millis() as u64;
                         let remaining_ms = state.persisted.timeout_ms.saturating_sub(elapsed);
 
-                        let status_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                        let status_msg = ServerMessage::new(ServerPayload::ActivityStopStatus {
                             symbol: state.persisted.symbol.clone(),
                             remaining_ms,
                             active: true,
@@ -439,11 +439,11 @@ async fn handle_connection(
                                                 tracing::info!(symbol = %state.persisted.symbol, side = ?state.persisted.side, qty = %position.quantity, "Panic stop market close executed");
                                                 let symbol_clone = state.persisted.symbol.clone();
                                                 let side_for_delete = state.persisted.side;
-                                                if let Err(e) = db::delete_panic_stop(&db, &symbol_clone.0, side_for_delete) {
+                                                if let Err(e) = db::delete_activity_stop(&db, &symbol_clone.0, side_for_delete) {
                                                     tracing::warn!(error = %e, "Failed to delete panic stop from database");
                                                 }
                                                 *state_guard = None;
-                                                let triggered_msg = ServerMessage::new(ServerPayload::PanicStopTriggered {
+                                                let triggered_msg = ServerMessage::new(ServerPayload::ActivityStopTriggered {
                                                     symbol: symbol_clone,
                                                 });
                                                 let _ = tx_for_timer.send(triggered_msg).await;
@@ -454,7 +454,7 @@ async fn handle_connection(
                                                 let side_for_delete = state.persisted.side;
                                                 let error_string = e.to_string();
                                                 tracing::error!(symbol = %symbol_clone, actual_side = ?pos_side, error = %error_string, "Failed to execute panic stop market close");
-                                                if let Err(e) = db::delete_panic_stop(&db, &symbol_clone.0, side_for_delete) {
+                                                if let Err(e) = db::delete_activity_stop(&db, &symbol_clone.0, side_for_delete) {
                                                     tracing::warn!(error = %e, "Failed to delete panic stop from database");
                                                 }
                                                 *state_guard = None;
@@ -468,11 +468,11 @@ async fn handle_connection(
                                         tracing::info!(symbol = %state.persisted.symbol, side = ?state.persisted.side, "Position already closed, canceling panic stop");
                                         let symbol_clone = state.persisted.symbol.clone();
                                         let side_for_delete = state.persisted.side;
-                                        if let Err(e) = db::delete_panic_stop(&db, &symbol_clone.0, side_for_delete) {
+                                        if let Err(e) = db::delete_activity_stop(&db, &symbol_clone.0, side_for_delete) {
                                             tracing::warn!(error = %e, "Failed to delete panic stop from database");
                                         }
                                         *state_guard = None;
-                                        let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                                        let cancel_msg = ServerMessage::new(ServerPayload::ActivityStopStatus {
                                             symbol: symbol_clone,
                                             remaining_ms: 0,
                                             active: false,
@@ -485,11 +485,11 @@ async fn handle_connection(
                                     tracing::error!(symbol = %state.persisted.symbol, error = %e, "Failed to get positions for panic stop");
                                     let symbol_clone = state.persisted.symbol.clone();
                                     let side_for_delete = state.persisted.side;
-                                    if let Err(del_e) = db::delete_panic_stop(&db, &symbol_clone.0, side_for_delete) {
+                                    if let Err(del_e) = db::delete_activity_stop(&db, &symbol_clone.0, side_for_delete) {
                                         tracing::warn!(error = %del_e, "Failed to delete panic stop from database");
                                     }
                                     *state_guard = None;
-                                    let cancel_msg = ServerMessage::new(ServerPayload::PanicStopStatus {
+                                    let cancel_msg = ServerMessage::new(ServerPayload::ActivityStopStatus {
                                         symbol: symbol_clone,
                                         remaining_ms: 0,
                                         active: false,

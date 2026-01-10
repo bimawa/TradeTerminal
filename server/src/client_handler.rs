@@ -3,21 +3,21 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
-use trade_shared::{ClientMessage, ClientPayload, PersistedPanicStopState, ServerMessage, ServerPayload};
+use trade_shared::{ClientMessage, ClientPayload, PersistedActivityStopState, ServerMessage, ServerPayload};
 
 use crate::bybit::BybitClient;
 use crate::db;
-use crate::server::PanicStopState;
+use crate::server::ActivityStopState;
 
 pub struct ClientHandler {
     bybit: Arc<BybitClient>,
-    panic_stop_state: Arc<Mutex<Option<PanicStopState>>>,
+    activity_stop_state: Arc<Mutex<Option<ActivityStopState>>>,
     db: Arc<redb::Database>,
 }
 
 impl ClientHandler {
-    pub fn new(bybit: Arc<BybitClient>, panic_stop_state: Arc<Mutex<Option<PanicStopState>>>, db: Arc<redb::Database>) -> Self {
-        Self { bybit, panic_stop_state, db }
+    pub fn new(bybit: Arc<BybitClient>, activity_stop_state: Arc<Mutex<Option<ActivityStopState>>>, db: Arc<redb::Database>) -> Self {
+        Self { bybit, activity_stop_state, db }
     }
 
     pub async fn handle(&self, msg: ClientMessage, tx: &mpsc::Sender<ServerMessage>) -> Result<()> {
@@ -122,13 +122,13 @@ impl ClientHandler {
                 }
             }
 
-            ClientPayload::PanicStop(req) => {
+            ClientPayload::ActivityStop(req) => {
                 let active = req.trigger_price.is_none();
                 let start_timestamp = SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .map(|d| d.as_millis() as i64)
                     .unwrap_or(0);
-                let persisted = PersistedPanicStopState {
+                let persisted = PersistedActivityStopState {
                     symbol: req.symbol.clone(),
                     side: req.side,
                     timeout_ms: req.timeout_secs as u64 * 1000,
@@ -136,35 +136,35 @@ impl ClientHandler {
                     start_timestamp,
                     active,
                 };
-                if let Err(e) = db::save_panic_stop(&self.db, &persisted) {
+                if let Err(e) = db::save_activity_stop(&self.db, &persisted) {
                     tracing::error!("Failed to save panic stop state to database: {:#}", e);
                 }
-                let state = PanicStopState {
+                let state = ActivityStopState {
                     persisted,
                     last_trade_time: Instant::now(),
                 };
-                *self.panic_stop_state.lock().await = Some(state);
+                *self.activity_stop_state.lock().await = Some(state);
                 if active {
                     tracing::info!("Panic stop activated immediately for {} {:?} with {}s timeout (no trigger)", req.symbol, req.side, req.timeout_secs);
                 } else {
                     tracing::info!("Panic stop registered for {} {:?} with {}s timeout, trigger@{:?}", req.symbol, req.side, req.timeout_secs, req.trigger_price);
                 }
-                ServerMessage::new(ServerPayload::PanicStopActivated {
+                ServerMessage::new(ServerPayload::ActivityStopActivated {
                     symbol: req.symbol,
                     timeout_secs: req.timeout_secs,
                     trigger_price: req.trigger_price,
                 })
             }
 
-            ClientPayload::CancelPanicStop { symbol } => {
-                let mut state = self.panic_stop_state.lock().await;
+            ClientPayload::CancelActivityStop { symbol } => {
+                let mut state = self.activity_stop_state.lock().await;
                 if let Some(current_state) = state.take() {
-                    if let Err(e) = db::delete_panic_stop(&self.db, &current_state.persisted.symbol.0, current_state.persisted.side) {
+                    if let Err(e) = db::delete_activity_stop(&self.db, &current_state.persisted.symbol.0, current_state.persisted.side) {
                         tracing::error!("Failed to delete panic stop state from database: {:#}", e);
                     }
                 }
                 tracing::info!("Panic stop cancelled for {}", symbol);
-                ServerMessage::new(ServerPayload::PanicStopStatus {
+                ServerMessage::new(ServerPayload::ActivityStopStatus {
                     symbol,
                     remaining_ms: 0,
                     active: false,

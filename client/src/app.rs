@@ -10,7 +10,7 @@ use std::str::FromStr;
 use tokio::sync::mpsc;
 use trade_shared::{
     calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, ClosePositionRequest, Order,
-    OrderRequest, OrderType, PanicStopRequest, Position, RiskError, ServerMessage, ServerPayload,
+    OrderRequest, OrderType, ActivityStopRequest, Position, RiskError, ServerMessage, ServerPayload,
     Side, Symbol, TimeInForce, Trade, TrailingStopRequest,
 };
 
@@ -39,7 +39,7 @@ const COMMANDS: &[Cmd] = &[
     Cmd { name: "level", aliases: &["lv"] },
     Cmd { name: "clevel", aliases: &["clv"] },
     Cmd { name: "sound", aliases: &["snd"] },
-    Cmd { name: "panicStop", aliases: &["ps"] },
+    Cmd { name: "activityStop", aliases: &["as"] },
 ];
 
 fn match_command(input: &str) -> Option<&'static str> {
@@ -136,9 +136,9 @@ pub struct App {
     audio_player: Option<AudioPlayer>,
     pub copy_index: usize,
     clipboard: Option<arboard::Clipboard>,
-    pub panic_stop_remaining_ms: Option<u64>,
-    pub panic_stop_active: bool,
-    pub panic_stop_trigger_price: Option<Decimal>,
+    pub activity_stop_remaining_ms: Option<u64>,
+    pub activity_stop_active: bool,
+    pub activity_stop_trigger_price: Option<Decimal>,
     pub mouse_position: Option<(u16, u16)>,
     pub chart_area: Option<ratatui::layout::Rect>,
     pub price_tracking: bool,
@@ -217,9 +217,9 @@ impl App {
             audio_player: AudioPlayer::new(),
             copy_index: 0,
             clipboard: arboard::Clipboard::new().ok(),
-            panic_stop_remaining_ms: None,
-            panic_stop_active: false,
-            panic_stop_trigger_price: None,
+            activity_stop_remaining_ms: None,
+            activity_stop_active: false,
+            activity_stop_trigger_price: None,
             mouse_position: None,
             chart_area: None,
             price_tracking: false,
@@ -707,11 +707,11 @@ impl App {
                     self.messages.push("Usage: ts <trigger> <callback>".to_string());
                 }
             }
-            Some("panicStop") => {
+            Some("activityStop") => {
                 if parts.len() >= 2 {
-                    self.set_panic_stop(&parts[1..], Some(pending.side)).await?;
+                    self.set_activity_stop(&parts[1..], Some(pending.side)).await?;
                 } else {
-                    self.messages.push("Usage: ps <seconds> [trigger_price]".to_string());
+                    self.messages.push("Usage: as <seconds> [trigger_price]".to_string());
                 }
             }
             _ => {
@@ -853,11 +853,11 @@ impl App {
                 self.sound_enabled = !self.sound_enabled;
                 self.messages.push(format!("Sound: {}", if self.sound_enabled { "ON" } else { "OFF" }));
             }
-            Some("panicStop") => {
+            Some("activityStop") => {
                 if parts.len() >= 2 {
-                    self.set_panic_stop(&parts[1..], None).await?;
+                    self.set_activity_stop(&parts[1..], None).await?;
                 } else {
-                    self.messages.push("Usage: ps <seconds> [trigger_price]".to_string());
+                    self.messages.push("Usage: as <seconds> [trigger_price]".to_string());
                 }
             }
             _ => {
@@ -1184,7 +1184,7 @@ impl App {
         Ok(())
     }
 
-    async fn set_panic_stop(&mut self, args: &[&str], side: Option<Side>) -> Result<()> {
+    async fn set_activity_stop(&mut self, args: &[&str], side: Option<Side>) -> Result<()> {
         let timeout_secs: u32 = match args[0].parse() {
             Ok(v) => v,
             Err(_) => {
@@ -1212,28 +1212,28 @@ impl App {
                 match pos {
                     Some(p) => p.side,
                     None => {
-                        self.messages.push("No position found for panic stop".to_string());
+                        self.messages.push("No position found for activity stop".to_string());
                         return Ok(());
                     }
                 }
             }
         };
 
-        let req = PanicStopRequest {
+        let req = ActivityStopRequest {
             symbol: Symbol::new(&self.symbol),
             side: position_side,
             timeout_secs,
             trigger_price,
         };
 
-        let msg = ClientMessage::new(ClientPayload::PanicStop(req));
+        let msg = ClientMessage::new(ClientPayload::ActivityStop(req));
         self.conn_tx.send(msg).await?;
 
         let trigger_str = trigger_price
             .map(|p| format!(" trigger@{:.2}", p))
             .unwrap_or_default();
         self.messages.push(format!(
-            "Setting panic stop: {} {}s{}",
+            "Setting activity stop: {} {}s{}",
             if position_side == Side::Buy { "LONG" } else { "SHORT" },
             timeout_secs,
             trigger_str
@@ -1312,13 +1312,13 @@ impl App {
         self.messages.push("  close [l|s]                    - Close position (auto if one)".to_string());
         self.messages.push("  symbol <sym>                   - Set symbol".to_string());
         self.messages.push("  ts <trigger> <callback>        - Set trailing stop (% or abs)".to_string());
-        self.messages.push("  ps <secs> [trigger]            - Panic stop (auto-close after N sec)".to_string());
+        self.messages.push("  as <secs> [trigger]            - Activity stop (auto-close after N sec)".to_string());
         self.messages.push("  chart                          - Open chart view".to_string());
         self.messages.push("  tf <1|5|15|30|60|240|D|W>      - Set timeframe".to_string());
         self.messages.push("  level <price>                  - Add price level".to_string());
         self.messages.push("  clevel [price]                 - Clear level(s)".to_string());
         self.messages.push("  sound                          - Toggle trade sounds".to_string());
-        self.messages.push("Pipe operator: br 1 0.3% | ps 5  - Execute ps after position opens".to_string());
+        self.messages.push("Pipe operator: br 1 0.3% | as 5  - Execute as after position opens".to_string());
         self.messages.push("Chain commands: cmd1 ; cmd2      - Run sequentially".to_string());
         self.messages.push("Chart keys: h/l/←/→=scroll, k/j/↑/↓=vertical, +/-=zoom, [/]=vzoom, 0=reset".to_string());
         self.messages.push("Keys: Tab=autocomplete, r=refresh, :=command, q=quit".to_string());
@@ -1410,13 +1410,13 @@ impl App {
                             }
                         }
                     } else if had_position && !has_position
-                        && (self.panic_stop_active || self.panic_stop_remaining_ms.is_some()) {
-                            let msg = ClientMessage::new(ClientPayload::CancelPanicStop {
+                        && (self.activity_stop_active || self.activity_stop_remaining_ms.is_some()) {
+                            let msg = ClientMessage::new(ClientPayload::CancelActivityStop {
                                 symbol: Symbol::new(&self.symbol),
                             });
                             let _ = self.conn_tx.send(msg).await;
-                            self.panic_stop_active = false;
-                            self.panic_stop_remaining_ms = None;
+                            self.activity_stop_active = false;
+                            self.activity_stop_remaining_ms = None;
                         }
                 }
                 ServerPayload::TrailingStopSet { symbol } => {
@@ -1431,11 +1431,11 @@ impl App {
                         }
                     }
                 }
-                ServerPayload::PanicStopActivated { symbol, timeout_secs, trigger_price } => {
-                    self.messages.push(format!("Panic stop activated for {} ({}s)", symbol.0, timeout_secs));
-                    self.panic_stop_active = true;
-                    self.panic_stop_remaining_ms = Some((timeout_secs as u64) * 1000);
-                    self.panic_stop_trigger_price = trigger_price;
+                ServerPayload::ActivityStopActivated { symbol, timeout_secs, trigger_price } => {
+                    self.messages.push(format!("Activity stop activated for {} ({}s)", symbol.0, timeout_secs));
+                    self.activity_stop_active = true;
+                    self.activity_stop_remaining_ms = Some((timeout_secs as u64) * 1000);
+                    self.activity_stop_trigger_price = trigger_price;
 
                     if let Some(pending) = self.pending_action.take() {
                         if pending.symbol == symbol.0 {
@@ -1446,16 +1446,16 @@ impl App {
                         }
                     }
                 }
-                ServerPayload::PanicStopStatus { symbol: _, remaining_ms, active, trigger_price } => {
-                    self.panic_stop_active = active;
-                    self.panic_stop_remaining_ms = if active { Some(remaining_ms) } else { None };
-                    self.panic_stop_trigger_price = if active { trigger_price } else { None };
+                ServerPayload::ActivityStopStatus { symbol: _, remaining_ms, active, trigger_price } => {
+                    self.activity_stop_active = active;
+                    self.activity_stop_remaining_ms = if active { Some(remaining_ms) } else { None };
+                    self.activity_stop_trigger_price = if active { trigger_price } else { None };
                 }
-                ServerPayload::PanicStopTriggered { symbol } => {
-                    self.messages.push(format!("Panic stop triggered for {} - market close executed", symbol.0));
-                    self.panic_stop_active = false;
-                    self.panic_stop_remaining_ms = None;
-                    self.panic_stop_trigger_price = None;
+                ServerPayload::ActivityStopTriggered { symbol } => {
+                    self.messages.push(format!("Activity stop triggered for {} - market close executed", symbol.0));
+                    self.activity_stop_active = false;
+                    self.activity_stop_remaining_ms = None;
+                    self.activity_stop_trigger_price = None;
                 }
                 ServerPayload::OrderError { message } => {
                     self.messages.push(format!("Order error: {}", message));

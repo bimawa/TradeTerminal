@@ -236,7 +236,7 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled("  ━", Style::default().fg(Color::LightYellow)),
-            Span::raw(" Panic Stop"),
+            Span::raw(" Activity Stop"),
         ]),
         Line::from(vec![
             Span::styled("  ━", Style::default().fg(Color::Cyan)),
@@ -476,7 +476,7 @@ fn draw_candlesticks(f: &mut Frame, app: &mut App, area: Rect) {
                 }
             }
 
-            if let Some(ps_price) = app.panic_stop_trigger_price {
+            if let Some(ps_price) = app.activity_stop_trigger_price {
                 let x_end = (visible_count * (candle_width + 1)) as f64;
                 let ps_y = dec_to_f64(ps_price);
                 if ps_y >= y_min && ps_y <= y_max {
@@ -837,9 +837,9 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
 }
 
 fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
-    let has_panic_stop = app.panic_stop_remaining_ms.is_some();
+    let has_activity_stop = app.activity_stop_remaining_ms.is_some();
     let available_lines = (area.height as usize).saturating_sub(2);
-    let trades_lines = if has_panic_stop {
+    let trades_lines = if has_activity_stop {
         available_lines.saturating_sub(1)
     } else {
         available_lines
@@ -847,21 +847,21 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
 
     let mut items: Vec<ListItem> = Vec::new();
 
-    if let Some(remaining_ms) = app.panic_stop_remaining_ms {
+    if let Some(remaining_ms) = app.activity_stop_remaining_ms {
         let remaining_secs = remaining_ms as f64 / 1000.0;
-        let timer_style = if app.panic_stop_active {
+        let timer_style = if app.activity_stop_active {
             Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         };
-        let status_str = if app.panic_stop_active {
-            if let Some(trigger) = app.panic_stop_trigger_price {
-                format!("PS: {:.1}s @{:>9}", remaining_secs, trigger)
+        let status_str = if app.activity_stop_active {
+            if let Some(trigger) = app.activity_stop_trigger_price {
+                format!("AS: {:.1}s @{:>9}", remaining_secs, trigger)
             } else {
-                format!("PS: {:.1}s", remaining_secs)
+                format!("AS: {:.1}s", remaining_secs)
             }
         } else {
-            "PS: ---".to_string()
+            "AS: ---".to_string()
         };
         items.push(ListItem::new(Line::from(vec![
             Span::styled(status_str, timer_style),

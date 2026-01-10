@@ -17,8 +17,8 @@ pub enum ClientPayload {
     CancelOrder { order_id: String },
     CancelAllOrders { symbol: Option<Symbol> },
     SetTrailingStop(TrailingStopRequest),
-    PanicStop(PanicStopRequest),
-    CancelPanicStop { symbol: Symbol },
+    ActivityStop(ActivityStopRequest),
+    CancelActivityStop { symbol: Symbol },
     ClosePosition(ClosePositionRequest),
     GetPositions,
     GetOrders { symbol: Option<Symbol> },
@@ -60,9 +60,9 @@ pub enum ServerPayload {
     OrderUpdate(Order),
     OrderError { message: String },
     TrailingStopSet { symbol: Symbol },
-    PanicStopActivated { symbol: Symbol, timeout_secs: u32, trigger_price: Option<rust_decimal::Decimal> },
-    PanicStopStatus { symbol: Symbol, remaining_ms: u64, active: bool, trigger_price: Option<rust_decimal::Decimal> },
-    PanicStopTriggered { symbol: Symbol },
+    ActivityStopActivated { symbol: Symbol, timeout_secs: u32, trigger_price: Option<rust_decimal::Decimal> },
+    ActivityStopStatus { symbol: Symbol, remaining_ms: u64, active: bool, trigger_price: Option<rust_decimal::Decimal> },
+    ActivityStopTriggered { symbol: Symbol },
     Positions(Vec<Position>),
     Orders(Vec<Order>),
     AccountInfo(AccountInfo),
@@ -85,8 +85,8 @@ impl ClientPayload {
             Self::CancelOrder { .. } => MessageType::CancelOrder,
             Self::CancelAllOrders { .. } => MessageType::CancelAllOrders,
             Self::SetTrailingStop(_) => MessageType::SetTrailingStop,
-            Self::PanicStop(_) => MessageType::PanicStop,
-            Self::CancelPanicStop { .. } => MessageType::CancelPanicStop,
+            Self::ActivityStop(_) => MessageType::ActivityStop,
+            Self::CancelActivityStop { .. } => MessageType::CancelActivityStop,
             Self::ClosePosition(_) => MessageType::ClosePosition,
             Self::GetPositions => MessageType::GetPositions,
             Self::GetOrders { .. } => MessageType::GetOrders,
@@ -139,9 +139,9 @@ impl ServerPayload {
             Self::OrderUpdate(_) => MessageType::OrderUpdate,
             Self::OrderError { .. } => MessageType::OrderError,
             Self::TrailingStopSet { .. } => MessageType::TrailingStopSet,
-            Self::PanicStopActivated { .. } => MessageType::PanicStopActivated,
-            Self::PanicStopStatus { .. } => MessageType::PanicStopStatus,
-            Self::PanicStopTriggered { .. } => MessageType::PanicStopTriggered,
+            Self::ActivityStopActivated { .. } => MessageType::ActivityStopActivated,
+            Self::ActivityStopStatus { .. } => MessageType::ActivityStopStatus,
+            Self::ActivityStopTriggered { .. } => MessageType::ActivityStopTriggered,
             Self::Positions(_) => MessageType::Positions,
             Self::Orders(_) => MessageType::Orders,
             Self::AccountInfo(_) => MessageType::AccountInfo,
@@ -465,32 +465,32 @@ mod tests {
     }
 
     #[test]
-    fn test_panic_stop_activated_payload() {
-        let payload = ServerPayload::PanicStopActivated {
+    fn test_activity_stop_activated_payload() {
+        let payload = ServerPayload::ActivityStopActivated {
             symbol: Symbol::new("BTCUSDT"),
             timeout_secs: 5,
             trigger_price: Some(dec!(95000)),
         };
 
         let json = serde_json::to_string(&payload).unwrap();
-        assert!(json.contains("\"type\":\"PanicStopActivated\""));
+        assert!(json.contains("\"type\":\"ActivityStopActivated\""));
         assert!(json.contains("\"symbol\":\"BTCUSDT\""));
         assert!(json.contains("\"timeout_secs\":5"));
 
         let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
         match parsed {
-            ServerPayload::PanicStopActivated { symbol, timeout_secs, trigger_price } => {
+            ServerPayload::ActivityStopActivated { symbol, timeout_secs, trigger_price } => {
                 assert_eq!(symbol.0, "BTCUSDT");
                 assert_eq!(timeout_secs, 5);
                 assert_eq!(trigger_price, Some(dec!(95000)));
             }
-            _ => panic!("Expected PanicStopActivated"),
+            _ => panic!("Expected ActivityStopActivated"),
         }
     }
 
     #[test]
-    fn test_panic_stop_status_payload() {
-        let payload = ServerPayload::PanicStopStatus {
+    fn test_activity_stop_status_payload() {
+        let payload = ServerPayload::ActivityStopStatus {
             symbol: Symbol::new("ETHUSDT"),
             remaining_ms: 3500,
             active: true,
@@ -498,25 +498,25 @@ mod tests {
         };
 
         let json = serde_json::to_string(&payload).unwrap();
-        assert!(json.contains("\"type\":\"PanicStopStatus\""));
+        assert!(json.contains("\"type\":\"ActivityStopStatus\""));
         assert!(json.contains("\"remaining_ms\":3500"));
         assert!(json.contains("\"active\":true"));
 
         let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
         match parsed {
-            ServerPayload::PanicStopStatus { symbol, remaining_ms, active, trigger_price } => {
+            ServerPayload::ActivityStopStatus { symbol, remaining_ms, active, trigger_price } => {
                 assert_eq!(symbol.0, "ETHUSDT");
                 assert_eq!(remaining_ms, 3500);
                 assert!(active);
                 assert_eq!(trigger_price, Some(dec!(2500)));
             }
-            _ => panic!("Expected PanicStopStatus"),
+            _ => panic!("Expected ActivityStopStatus"),
         }
     }
 
     #[test]
-    fn test_panic_stop_status_inactive() {
-        let payload = ServerPayload::PanicStopStatus {
+    fn test_activity_stop_status_inactive() {
+        let payload = ServerPayload::ActivityStopStatus {
             symbol: Symbol::new("BTCUSDT"),
             remaining_ms: 0,
             active: false,
@@ -528,29 +528,29 @@ mod tests {
 
         let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
         match parsed {
-            ServerPayload::PanicStopStatus { active, .. } => {
+            ServerPayload::ActivityStopStatus { active, .. } => {
                 assert!(!active);
             }
-            _ => panic!("Expected PanicStopStatus"),
+            _ => panic!("Expected ActivityStopStatus"),
         }
     }
 
     #[test]
-    fn test_panic_stop_triggered_payload() {
-        let payload = ServerPayload::PanicStopTriggered {
+    fn test_activity_stop_triggered_payload() {
+        let payload = ServerPayload::ActivityStopTriggered {
             symbol: Symbol::new("BTCUSDT"),
         };
 
         let json = serde_json::to_string(&payload).unwrap();
-        assert!(json.contains("\"type\":\"PanicStopTriggered\""));
+        assert!(json.contains("\"type\":\"ActivityStopTriggered\""));
         assert!(json.contains("\"symbol\":\"BTCUSDT\""));
 
         let parsed: ServerPayload = serde_json::from_str(&json).unwrap();
         match parsed {
-            ServerPayload::PanicStopTriggered { symbol } => {
+            ServerPayload::ActivityStopTriggered { symbol } => {
                 assert_eq!(symbol.0, "BTCUSDT");
             }
-            _ => panic!("Expected PanicStopTriggered"),
+            _ => panic!("Expected ActivityStopTriggered"),
         }
     }
 }

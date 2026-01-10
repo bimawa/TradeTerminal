@@ -143,7 +143,7 @@ pub struct Trade {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PanicStopRequest {
+pub struct ActivityStopRequest {
     pub symbol: Symbol,
     pub side: Side,
     pub timeout_secs: u32,
@@ -151,7 +151,7 @@ pub struct PanicStopRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistedPanicStopState {
+pub struct PersistedActivityStopState {
     pub symbol: Symbol,
     pub side: Side,
     pub timeout_ms: u64,
@@ -366,8 +366,8 @@ mod tests {
     }
 
     #[test]
-    fn test_panic_stop_request_serialization() {
-        let req = PanicStopRequest {
+    fn test_activity_stop_request_serialization() {
+        let req = ActivityStopRequest {
             symbol: Symbol::new("BTCUSDT"),
             side: Side::Buy,
             timeout_secs: 5,
@@ -375,7 +375,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&req).unwrap();
-        let parsed: PanicStopRequest = serde_json::from_str(&json).unwrap();
+        let parsed: ActivityStopRequest = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.symbol.0, "BTCUSDT");
         assert_eq!(parsed.side, Side::Buy);
@@ -384,8 +384,8 @@ mod tests {
     }
 
     #[test]
-    fn test_panic_stop_request_without_trigger_price() {
-        let req = PanicStopRequest {
+    fn test_activity_stop_request_without_trigger_price() {
+        let req = ActivityStopRequest {
             symbol: Symbol::new("ETHUSDT"),
             side: Side::Sell,
             timeout_secs: 3,
@@ -395,14 +395,14 @@ mod tests {
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"trigger_price\":null"));
 
-        let parsed: PanicStopRequest = serde_json::from_str(&json).unwrap();
+        let parsed: ActivityStopRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.timeout_secs, 3);
         assert!(parsed.trigger_price.is_none());
     }
 
     #[test]
-    fn test_persisted_panic_stop_state_serialization() {
-        let state = PersistedPanicStopState {
+    fn test_persisted_activity_stop_state_serialization() {
+        let state = PersistedActivityStopState {
             symbol: Symbol::new("BTCUSDT"),
             side: Side::Buy,
             timeout_ms: 5000,
@@ -412,7 +412,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&state).unwrap();
-        let parsed: PersistedPanicStopState = serde_json::from_str(&json).unwrap();
+        let parsed: PersistedActivityStopState = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.symbol.0, "BTCUSDT");
         assert_eq!(parsed.side, Side::Buy);
