@@ -1161,7 +1161,7 @@ impl App {
         };
 
         let trailing_stop = match callback {
-            Value::Percent(pct) => entry_price * pct / Decimal::from(100),
+            Value::Percent(pct) => active_price * pct / Decimal::from(100),
             Value::Absolute(val) => val,
         };
 
