@@ -1,34 +1,109 @@
-# Genie Dev Technical Stack
-Genie Dev extends the core Genie template with diagnostics and automation focused on self-evolution. The stack stays lightweight so downstream repos can still install it cleanly.
+# TradeTerminal Technical Stack
 
-## Core CLI
-- **Runtime:** Node.js 20.x managed with `pnpm`
-- **Language:** TypeScript 5.9 (compiled via `src/cli/tsconfig.json`)
-- **UI:** `ink` + `react` for interactive CLI flows
-- **Formatting & Parsing:** `yaml` for agent metadata, native fs/stream tooling for logs
+## Architecture
 
-## Agent Assets
-- **Prompts:** Markdown agents under `.genie/agents/` with shared personas in `.genie/agents/core/`
-- **Project Overrides:** Add a short "Project Notes" section inside relevant agent or spell docs (no separate `custom/` directory)
-- **State:** Session and ledger files stored in `.genie/state/` (never edit manually; inspect via MCP genie tools: `mcp__genie__list_sessions`, `mcp__genie__view`)
+**Client-Server model** with WebSocket communication for real-time order execution and position updates.
 
-## Testing & Validation
-- **Smoke Suite:** `tests/genie-cli.test.js` exercises CLI commands and prompt loading
-- **Identity Check:** `tests/identity-smoke.sh` ensures guardrails match expectations
-- **Recommended Checks:** `pnpm run build:genie` followed by `pnpm run test:genie` before publishing upgrades
+### Server (Trade Server)
+- **Runtime:** Rust (stable 1.75+)
+- **Purpose:** Handles Bybit API communication, order management, trailing stops
+- **Deployment:** Docker container on VPS (Singapore region recommended)
+- **Persistence:** In-memory state management
 
-## Meta-Agent Instrumentation
-- **Done Reports:** `.genie/wishes/<slug>/reports/` captures experiment evidence and upgrade readiness
-- **Learning Ledger:** `.genie/instructions/*` houses behavioural overrides promoted from experiments
-- **Genie Orchestrator:** `.genie/agents/orchestrator.md` powers second-opinion audits before adopting risky changes
+### Client (Trade Client)
+- **Runtime:** Rust (stable 1.75+)
+- **UI Framework:** Ratatui (terminal UI)
+- **Purpose:** User interface, command parsing, real-time data display
+- **Deployment:** Local binary or any machine with network access
 
-## Toolchain Integrations
-- **Version Control:** Git-driven; branch `genie-dev` serves as the experimental lane
-- **CI Hooks (planned):** GitHub Actions pipeline to run build + smoke tests and publish artefacts for review
-- **Optional Runtimes:** Node/TS remains primary; Rust components can be referenced via `vendors/` for cross-language experiments
+## Core Technologies
+
+### Backend
+- **tokio:** Async runtime for WebSocket server and concurrent task management
+- **tokio-tungstenite:** WebSocket server implementation
+- **reqwest:** HTTP client for Bybit REST API
+- **tokio-tungstenite (client):** WebSocket client for Bybit streaming data
+- **serde/serde_json:** JSON serialization for API communication
+
+### Frontend (TUI)
+- **ratatui:** Terminal UI framework with widgets and layouts
+- **crossterm:** Cross-platform terminal manipulation
+- **tui-textarea:** Text input widget for command entry
+- **plotters/plotters-backend-text:** ASCII chart rendering for price visualization
+
+### Shared Libraries
+- **chrono:** Timestamp handling for orders and positions
+- **rust_decimal:** Precise decimal calculations for trading amounts
+- **hmac/sha2:** HMAC-SHA256 for Bybit API authentication
+
+## Communication Protocol
+
+### WebSocket Messages (Client ↔ Server)
+JSON-based command/response protocol:
+- Commands: `PlaceOrder`, `CancelOrder`, `SetTrailingStop`, `GetPositions`
+- Responses: `OrderPlaced`, `PositionUpdate`, `Error`
+
+### Bybit API Integration
+- **REST API:** Order placement, cancellation, position queries
+- **WebSocket API:** Real-time position updates, order fills, price stream
+
+## Development Tools
+
+### Build & Package
+- **Cargo:** Rust build system and dependency manager
+- **Workspace:** Multi-crate project (client, server, shared)
+- **Just:** Task runner for common commands (see `justfile`)
+
+### Deployment
+- **Docker Compose:** Container orchestration for server deployment
+- **Environment Variables:** `.env` file for API credentials configuration
+
+## Testing Strategy
+
+### Unit Tests
+- Command parsing logic
+- Position size calculation
+- Trailing stop activation logic
+
+### Integration Tests
+- WebSocket client-server communication
+- Mock Bybit API responses
+
+### Manual Testing
+- Testnet trading with real API
+- Command chaining scenarios
+- UI responsiveness tests
 
 ## Observability
-- **Logs:** CLI captures command transcripts under `.genie/state/logs/`
-- **Metrics (manual):** Encourage recording latency/quality metrics inside wish evidence tables until automated collectors land
 
-This stack keeps Genie fast to iterate while providing the hooks required for self-auditing and safe downstream adoption.
+### Logging
+- Server logs: Order execution, WebSocket events, API errors
+- Client logs: Command history, connection status
+
+### Monitoring
+- Position tracking: Real-time display in TUI
+- Order status: Active orders tab with updates
+- Connection health: WebSocket status indicator
+
+## Performance Considerations
+
+### Latency Optimization
+- Server on Singapore VPS: <50ms to Bybit servers
+- WebSocket persistent connection: No reconnection overhead
+- Async operations: Non-blocking order execution
+
+### Resource Usage
+- Server: ~10-20MB RAM (Rust minimal runtime)
+- Client: ~5-10MB RAM (terminal UI only)
+- Network: Minimal bandwidth (JSON messages + price stream)
+
+## Security
+
+### API Key Management
+- Environment variables (not committed to git)
+- Server-side key storage only
+- HMAC-SHA256 signed requests to Bybit
+
+### Network Security
+- WebSocket over local network or VPN recommended
+- No external dependencies for client

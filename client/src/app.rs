@@ -525,8 +525,8 @@ impl App {
                             let price_str = price_rounded.to_string();
 
                             if self.input_mode == InputMode::Command {
-                                self.input.push_str(&price_str);
-                                self.input_cursor = self.input.len();
+                                self.input.insert_str(self.input_cursor, &price_str);
+                                self.input_cursor += price_str.len();
                                 self.messages.push(format!("Price inserted: {}", price_str));
                             } else {
                                 if let Some(ref mut cb) = self.clipboard {

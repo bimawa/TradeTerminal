@@ -1,0 +1,7 @@
+defaults:
+  executor: CLAUDE_CODE
+  variant: DEFAULT
+
+hooks:
+  skip_tests: false
+  allow_main_push: false

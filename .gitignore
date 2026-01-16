@@ -9,3 +9,5 @@
 
 .genie/state/*
 !.genie/state/version.json
+.genie/.tasks
+/tmp/genie/

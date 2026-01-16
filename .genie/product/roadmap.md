@@ -1,44 +1,62 @@
-# Genie Dev Roadmap
-The genie-dev branch is the laboratory for Genie’s self-improvement program. Phases are sequenced to keep downstream adopters safe while we iterate quickly.
+# TradeTerminal Roadmap
 
-## Phase 0 — Baseline Capture (✅ complete)
-- Neutralize template placeholders and document the current mission, tech stack, and guardrails
-- Inventory existing behavioural learnings and confirm they are enforced across agents
-- Establish `pnpm run build:genie` + smoke tests as the minimum verification gate
+## Phase 0 — Core Functionality (✅ complete)
+- Basic order placement (market/limit buy/sell)
+- Position size calculation from risk amount
+- Take Profit percentage-based
+- Trailing Stop with activation and callback
+- WebSocket client-server communication
+- Docker deployment support
 
-## Phase 1 — Instrumentation & Telemetry (in progress)
-- Treat the wish **Evidence Checklist** as the gating deliverable before other instrumentation tasks proceed (see ).
-- Add branch-specific checklists to every wish to log evidence paths and validation commands
-- Expand done-report coverage so each experiment stores scope, risks, and follow-ups
-- Wire CLI diagnostics to surface missing sessions or misconfigured presets
+## Phase 1 — Enhanced Trading Features (in progress)
+- **Chart Integration:** Real-time ASCII price charts with multiple timeframes
+- **Sound Notifications:** Audio feedback for executed trades
+- **Level Lines:** Visual price levels on charts
+- **Multi-Symbol Support:** Switch between trading pairs
+- **Command History:** Navigate previous commands with arrow keys
 
-## Phase 2 — Guided Self-Improvement
-- Author wishes that target prompt quality, guardrail clarity, and CLI usability
-- Pair each wish with twin audits and validation scripts before merging back to `main`
-- Promote validated learnings into `.genie/instructions/` and agent briefs
+## Phase 2 — Advanced Risk Management
+- **Multiple TP Levels:** Partial profit taking at different price levels
+- **Dynamic Stop-Loss:** Adjust SL based on volatility or support/resistance
+- **Position Scaling:** Add to winning positions with risk management
+- **Risk-Reward Calculator:** Show R:R ratio before order placement
+- **Max Drawdown Protection:** Automatic trading pause after loss threshold
 
-## Phase 3 — Adoption Kits for Downstream Repos
-- Package upgrade notes, migration diffs, and rollback guidance for every major change
-- Publish branch-to-main release checklist (Plan → Wish → Forge coverage, tests, done report link)
-- Partner with pilot teams to trial upgrades and capture their feedback in structured templates
+## Phase 3 — Automation & Scripting
+- **Script Mode:** Execute command sequences from files
+- **Conditional Orders:** If-then order placement (e.g., if BTC > 100k then buy ETH)
+- **Strategy Templates:** Predefined trading strategies (scalp, swing, etc.)
+- **Backtesting:** Test command sequences on historical data
+- **API for Bots:** HTTP/WebSocket API for external bot integration
 
-## Phase 4 — Automation & CI Integration
-- Land GitHub Actions pipeline that runs build + smoke tests and attaches artefacts to PRs
-- Add regression checks for behavioural rules (learn, guardrail compliance)
-- Introduce metrics capture (latency, wish completion velocity) with reporting hooks
+## Phase 4 — Professional Features
+- **Multi-Account Support:** Manage multiple Bybit accounts
+- **Portfolio View:** Aggregate positions across symbols
+- **Trade Journal:** Automatic logging with P&L tracking
+- **Performance Analytics:** Win rate, average R:R, equity curve
+- **Alert System:** Price alerts, position size alerts, risk alerts
+
+## Phase 5 — Exchange Expansion
+- **Binance Support:** Add Binance Futures connector
+- **OKX Support:** Add OKX connector
+- **Unified Protocol:** Abstract exchange-specific logic
+- **Cross-Exchange Arbitrage:** Detect and execute arbitrage opportunities
 
 ## Success Metrics
-- 100% of genie-dev wishes include validation commands and evidence links
-- Smoke suite (`pnpm run test:genie`) passing before merge on every PR
-- Documented learnings promoted within 48 hours of validation
-- Downstream adopters report <5% rollback rate on genie-dev releases
+- Order execution latency <100ms (VPS to Bybit)
+- Position size calculation accuracy 100%
+- Trailing stop activation rate >95%
+- Zero loss of funds due to bugs
+- User satisfaction: command execution <2 keystrokes average
 
 ## Dependencies & Enablers
-- Maintainers available for twin reviews and manual approvals
-- Access to GPT-5 class models (configurable via `GENIE_MODEL`)
-- Stable sandboxed environment mirroring production guardrails
+- Stable Bybit API (no breaking changes)
+- VPS availability in Singapore region
+- Rust async ecosystem maturity
+- Community feedback on UX improvements
 
 ## Risk Log (actively monitored)
-- **Automation drift:** self-improvement scripts may bypass approval gates → mitigate with review checklist baked into wishes
-- **Telemetry gaps:** missing evidence makes regression root-cause harder → mitigate by enforcing done report template updates
-- **Adopter fatigue:** too many upgrades without guides → mitigate by bundling changes into release kits with opt-in toggles
+- **API Changes:** Bybit may deprecate endpoints → mitigate with API version pinning and monitoring
+- **WebSocket Disconnects:** Network issues can cause missed updates → mitigate with reconnection logic and state reconciliation
+- **Fee Changes:** Exchange fee structure changes affect position sizing → mitigate with configurable fee rates
+- **Order Execution Failures:** Market conditions can prevent fills → mitigate with retry logic and user notifications

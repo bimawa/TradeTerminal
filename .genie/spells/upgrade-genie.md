@@ -196,7 +196,7 @@ fi
 - Structural changes require intelligent merging
 
 **Agent Workflow:**
-@.genie/agents/update.md
+@.genie/code/agents/update/upstream-update.md
 
 **Delegation Pattern:**
 ```javascript
