@@ -1,0 +1,9 @@
+{
+  "name": "trade-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Trading terminal for Bybit - Genie infrastructure",
+  "scripts": {
+    "test:all": "echo 'No tests configured for Rust project' && exit 0"
+  }
+}
