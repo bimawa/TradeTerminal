@@ -166,6 +166,39 @@ pub struct ClosePositionRequest {
     pub side: Side,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AutostopType {
+    Trailing,
+    Activity,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutostopParams {
+    pub trailing_stop: Option<Decimal>,
+    pub active_price: Option<Decimal>,
+    pub timeout_secs: Option<u32>,
+    pub trigger_price: Option<Decimal>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingAutostopCommand {
+    pub limit_order_id: String,
+    pub symbol: Symbol,
+    pub side: Side,
+    pub autostop_type: AutostopType,
+    pub autostop_params: AutostopParams,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingAutostopConfig {
+    pub symbol: Symbol,
+    pub side: Side,
+    pub autostop_type: AutostopType,
+    pub params: AutostopParams,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

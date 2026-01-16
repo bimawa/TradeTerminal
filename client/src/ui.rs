@@ -36,12 +36,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
-    let titles = vec!["Orders", "Positions", "Trade", "Chart"];
+    let titles = vec!["Orders", "Positions", "Trade", "Chart", "Autostops"];
     let selected = match app.tab {
         Tab::Orders => 0,
         Tab::Positions => 1,
         Tab::Trade => 2,
         Tab::Chart => 3,
+        Tab::Autostops => 4,
     };
 
     let status = if app.connected { "●" } else { "○" };
@@ -73,6 +74,7 @@ fn draw_main(f: &mut Frame, app: &mut App, area: Rect) {
         Tab::Positions => draw_positions(f, app, area),
         Tab::Trade => draw_trade(f, app, area),
         Tab::Chart => draw_chart(f, app, area),
+        Tab::Autostops => draw_autostops(f, app, area),
     }
 }
 
@@ -963,4 +965,65 @@ fn draw_input(f: &mut Frame, app: &App, area: Rect) {
     if app.input_mode == InputMode::Command {
         f.set_cursor_position((area.x + 2 + app.input_cursor as u16, area.y + 1));
     }
+}
+
+fn draw_autostops(f: &mut Frame, app: &App, area: Rect) {
+    let header = Row::new(vec!["Type", "Order ID", "Symbol", "Side", "Params", "Created"])
+        .style(Style::default().add_modifier(Modifier::BOLD));
+
+    let rows: Vec<Row> = app.pending_autostops.iter().map(|autostop| {
+        let autostop_type = match autostop.autostop_type {
+            trade_shared::AutostopType::Trailing => "Trailing",
+            trade_shared::AutostopType::Activity => "Activity",
+        };
+
+        let side = match autostop.side {
+            trade_shared::Side::Buy => "Buy",
+            trade_shared::Side::Sell => "Sell",
+        };
+
+        let params = match autostop.autostop_type {
+            trade_shared::AutostopType::Trailing => {
+                format!(
+                    "trigger: {}, callback: {}",
+                    autostop.autostop_params.active_price.map(|p| p.to_string()).unwrap_or_default(),
+                    autostop.autostop_params.trailing_stop.map(|p| p.to_string()).unwrap_or_default()
+                )
+            }
+            trade_shared::AutostopType::Activity => {
+                let timeout = autostop.autostop_params.timeout_secs.map(|t| format!("{}s", t)).unwrap_or_default();
+                let trigger = autostop.autostop_params.trigger_price.map(|p| format!(" @ {}", p)).unwrap_or_default();
+                format!("{}{}", timeout, trigger)
+            }
+        };
+
+        let created = autostop.created_at.format("%H:%M:%S").to_string();
+
+        Row::new(vec![
+            autostop_type.to_string(),
+            autostop.limit_order_id.clone(),
+            autostop.symbol.0.clone(),
+            side.to_string(),
+            params,
+            created,
+        ])
+    }).collect();
+
+    let table = Table::new(rows, vec![
+        Constraint::Length(10),
+        Constraint::Min(20),
+        Constraint::Length(10),
+        Constraint::Length(6),
+        Constraint::Min(30),
+        Constraint::Length(10),
+    ])
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!(" Pending Autostops ({}) ", app.pending_autostops.len()))
+    )
+    .row_highlight_style(Style::default().add_modifier(Modifier::BOLD));
+
+    f.render_widget(table, area);
 }

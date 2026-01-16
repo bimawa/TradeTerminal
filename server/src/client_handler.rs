@@ -172,6 +172,103 @@ impl ClientHandler {
                 })
             }
 
+            ClientPayload::CreatePendingAutostop { limit_order_id, config } => {
+                let pending = trade_shared::PendingAutostopCommand {
+                    limit_order_id: limit_order_id.clone(),
+                    symbol: config.symbol.clone(),
+                    side: config.side,
+                    autostop_type: config.autostop_type,
+                    autostop_params: config.params,
+                    created_at: chrono::Utc::now(),
+                };
+
+                match db::save_pending_autostop(&self.db, &pending) {
+                    Ok(_) => {
+                        tracing::info!("Created pending autostop for order {}", limit_order_id);
+                        ServerMessage::new(ServerPayload::PendingAutostopCreated { limit_order_id })
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to save pending autostop: {:#}", e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to create pending autostop: {}", e),
+                        })
+                    }
+                }
+            }
+
+            ClientPayload::UpdatePendingAutostop { limit_order_id, config } => {
+                match db::load_pending_autostop(&self.db, &limit_order_id) {
+                    Ok(Some(_)) => {
+                        let updated = trade_shared::PendingAutostopCommand {
+                            limit_order_id: limit_order_id.clone(),
+                            symbol: config.symbol,
+                            side: config.side,
+                            autostop_type: config.autostop_type,
+                            autostop_params: config.params,
+                            created_at: chrono::Utc::now(),
+                        };
+
+                        match db::save_pending_autostop(&self.db, &updated) {
+                            Ok(_) => {
+                                tracing::info!("Updated pending autostop for order {}", limit_order_id);
+                                ServerMessage::new(ServerPayload::PendingAutostopUpdated { limit_order_id })
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to update pending autostop: {:#}", e);
+                                ServerMessage::new(ServerPayload::Error {
+                                    code: 1,
+                                    message: format!("Failed to update pending autostop: {}", e),
+                                })
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::warn!("Attempted to update non-existent pending autostop for order {}", limit_order_id);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Pending autostop not found for order {}", limit_order_id),
+                        })
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load pending autostop: {:#}", e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to load pending autostop: {}", e),
+                        })
+                    }
+                }
+            }
+
+            ClientPayload::CancelPendingAutostop { limit_order_id } => {
+                match db::delete_pending_autostop(&self.db, &limit_order_id) {
+                    Ok(_) => {
+                        tracing::info!("Cancelled pending autostop for order {}", limit_order_id);
+                        ServerMessage::new(ServerPayload::PendingAutostopCancelled { limit_order_id })
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to delete pending autostop: {:#}", e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to cancel pending autostop: {}", e),
+                        })
+                    }
+                }
+            }
+
+            ClientPayload::GetPendingAutostops => {
+                match db::load_all_pending_autostops(&self.db) {
+                    Ok(commands) => ServerMessage::new(ServerPayload::PendingAutostops(commands)),
+                    Err(e) => {
+                        tracing::error!("Failed to load pending autostops: {:#}", e);
+                        ServerMessage::new(ServerPayload::Error {
+                            code: 1,
+                            message: format!("Failed to load pending autostops: {}", e),
+                        })
+                    }
+                }
+            }
+
             ClientPayload::ClosePosition(req) => {
                 match self.bybit.close_position(&req.symbol, req.side).await {
                     Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),

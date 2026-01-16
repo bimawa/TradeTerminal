@@ -9,8 +9,9 @@ use std::str::FromStr;
 
 use tokio::sync::mpsc;
 use trade_shared::{
-    calculate_position_size, round_quantity, Candle, ClientMessage, ClientPayload, ClosePositionRequest, Order,
-    OrderRequest, OrderType, ActivityStopRequest, Position, RiskError, ServerMessage, ServerPayload,
+    calculate_position_size, round_quantity, AutostopParams, AutostopType, Candle, ClientMessage,
+    ClientPayload, ClosePositionRequest, Order, OrderRequest, OrderType, ActivityStopRequest,
+    PendingAutostopCommand, PendingAutostopConfig, Position, RiskError, ServerMessage, ServerPayload,
     Side, Symbol, TimeInForce, Trade, TrailingStopRequest,
 };
 
@@ -103,6 +104,7 @@ pub enum InputMode {
 pub enum Tab {
     Orders,
     Positions,
+    Autostops,
     Trade,
     Chart,
 }
@@ -142,6 +144,8 @@ pub struct App {
     pub mouse_position: Option<(u16, u16)>,
     pub chart_area: Option<ratatui::layout::Rect>,
     pub price_tracking: bool,
+    pub pending_autostops: Vec<PendingAutostopCommand>,
+    pub last_placed_order_id: Option<String>,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -223,6 +227,8 @@ impl App {
             mouse_position: None,
             chart_area: None,
             price_tracking: false,
+            pending_autostops: Vec::new(),
+            last_placed_order_id: None,
         }
     }
 
@@ -278,7 +284,8 @@ impl App {
                         Tab::Orders => Tab::Positions,
                         Tab::Positions => Tab::Trade,
                         Tab::Trade => Tab::Chart,
-                        Tab::Chart => Tab::Orders,
+                        Tab::Chart => Tab::Autostops,
+                        Tab::Autostops => Tab::Orders,
                     };
                     if self.tab == Tab::Chart && self.candles.is_empty() {
                         self.refresh_candles().await?;
@@ -286,10 +293,11 @@ impl App {
                 }
                 KeyCode::BackTab => {
                     self.tab = match self.tab {
-                        Tab::Orders => Tab::Chart,
+                        Tab::Orders => Tab::Autostops,
                         Tab::Positions => Tab::Orders,
                         Tab::Trade => Tab::Positions,
                         Tab::Chart => Tab::Trade,
+                        Tab::Autostops => Tab::Chart,
                     };
                     if self.tab == Tab::Chart && self.candles.is_empty() {
                         self.refresh_candles().await?;
@@ -426,7 +434,8 @@ impl App {
                             Tab::Orders => Tab::Positions,
                             Tab::Positions => Tab::Trade,
                             Tab::Trade => Tab::Chart,
-                            Tab::Chart => Tab::Orders,
+                            Tab::Chart => Tab::Autostops,
+                            Tab::Autostops => Tab::Orders,
                         };
                         if self.tab == Tab::Chart && self.candles.is_empty() {
                             self.refresh_candles().await?;
@@ -434,10 +443,11 @@ impl App {
                     }
                     KeyCode::BackTab => {
                         self.tab = match self.tab {
-                            Tab::Orders => Tab::Chart,
+                            Tab::Orders => Tab::Autostops,
                             Tab::Positions => Tab::Orders,
                             Tab::Trade => Tab::Positions,
                             Tab::Chart => Tab::Trade,
+                            Tab::Autostops => Tab::Chart,
                         };
                         if self.tab == Tab::Chart && self.candles.is_empty() {
                             self.refresh_candles().await?;
@@ -716,6 +726,81 @@ impl App {
             }
             _ => {
                 self.execute_single_command(first_action).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn create_pending_autostop_from_action(
+        &mut self,
+        order_id: &str,
+        symbol: &Symbol,
+        side: Side,
+        pending: &PendingAction,
+    ) -> Result<()> {
+        for action in &pending.actions {
+            let parts: Vec<&str> = action.split_whitespace().collect();
+            if parts.is_empty() {
+                continue;
+            }
+
+            match match_command(parts[0]) {
+                Some("ts") => {
+                    if parts.len() >= 3 {
+                        let trigger = Decimal::from_str(parts[1])?;
+                        let callback = Decimal::from_str(parts[2])?;
+
+                        let config = PendingAutostopConfig {
+                            symbol: symbol.clone(),
+                            side,
+                            autostop_type: AutostopType::Trailing,
+                            params: AutostopParams {
+                                trailing_stop: Some(callback),
+                                active_price: Some(trigger),
+                                timeout_secs: None,
+                                trigger_price: None,
+                            },
+                        };
+
+                        let msg = ClientMessage::new(ClientPayload::CreatePendingAutostop {
+                            limit_order_id: order_id.to_string(),
+                            config,
+                        });
+                        self.conn_tx.send(msg).await?;
+                        self.messages.push(format!("Pending trailing stop created for order {}", order_id));
+                    }
+                }
+                Some("activityStop") => {
+                    if parts.len() >= 2 {
+                        let timeout_secs = parts[1].parse::<u32>()?;
+                        let trigger_price = if parts.len() >= 3 {
+                            Some(Decimal::from_str(parts[2])?)
+                        } else {
+                            None
+                        };
+
+                        let config = PendingAutostopConfig {
+                            symbol: symbol.clone(),
+                            side,
+                            autostop_type: AutostopType::Activity,
+                            params: AutostopParams {
+                                trailing_stop: None,
+                                active_price: None,
+                                timeout_secs: Some(timeout_secs),
+                                trigger_price,
+                            },
+                        };
+
+                        let msg = ClientMessage::new(ClientPayload::CreatePendingAutostop {
+                            limit_order_id: order_id.to_string(),
+                            config,
+                        });
+                        self.conn_tx.send(msg).await?;
+                        self.messages.push(format!("Pending activity stop created for order {}", order_id));
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -1303,8 +1388,8 @@ impl App {
 
     fn show_help(&mut self) {
         self.messages.push("Commands:".to_string());
-        self.messages.push("  buy <qty> [price]              - Place buy order".to_string());
-        self.messages.push("  sell <qty> [price]             - Place sell order".to_string());
+        self.messages.push("  buy <qty> [price]              - Place buy order (market/limit)".to_string());
+        self.messages.push("  sell <qty> [price]             - Place sell order (market/limit)".to_string());
         self.messages.push("  buyrisk <risk$> <sl|sl%> [lim] - Long with risk calc".to_string());
         self.messages.push("  sellrisk <risk$> <sl|sl%> [lim]- Short with risk calc".to_string());
         self.messages.push("  cancel <id>                    - Cancel order".to_string());
@@ -1318,8 +1403,16 @@ impl App {
         self.messages.push("  level <price>                  - Add price level".to_string());
         self.messages.push("  clevel [price]                 - Clear level(s)".to_string());
         self.messages.push("  sound                          - Toggle trade sounds".to_string());
-        self.messages.push("Pipe operator: br 1 0.3% | as 5  - Execute as after position opens".to_string());
-        self.messages.push("Chain commands: cmd1 ; cmd2      - Run sequentially".to_string());
+        self.messages.push("".to_string());
+        self.messages.push("Pipe operator (smart autostops):".to_string());
+        self.messages.push("  Market orders: br 1 0.3% | as 5         - Autostop activates on position open".to_string());
+        self.messages.push("  Limit orders:  sr 1 95000 96000 | ts 0.15 0.005 - Creates pending autostop".to_string());
+        self.messages.push("                                            (activates when order fills)".to_string());
+        self.messages.push("  Chain commands: cmd1 ; cmd2        - Run sequentially".to_string());
+        self.messages.push("".to_string());
+        self.messages.push("Tabs: Orders | Positions | Trade | Chart | Autostops (navigate with Tab/Shift+Tab)".to_string());
+        self.messages.push("  Autostops tab shows pending autostops (waiting for limit orders to fill)".to_string());
+        self.messages.push("".to_string());
         self.messages.push("Chart keys: h/l/←/→=scroll, k/j/↑/↓=vertical, +/-=zoom, [/]=vzoom, 0=reset".to_string());
         self.messages.push("Keys: Tab=autocomplete, r=refresh, :=command, q=quit".to_string());
     }
@@ -1383,6 +1476,19 @@ impl App {
                 }
                 ServerPayload::OrderPlaced(order) => {
                     self.messages.push(format!("Order placed: {}", order.id));
+                    self.last_placed_order_id = Some(order.id.clone());
+
+                    if order.order_type == OrderType::Limit {
+                        if let Some(pending) = self.pending_action.take() {
+                            if pending.symbol == self.symbol {
+                                self.messages.push(format!("Limit order placed, processing autostop: {}", pending.actions.join(" | ")));
+                                if let Err(e) = self.create_pending_autostop_from_action(&order.id, &order.symbol, order.side, &pending).await {
+                                    self.messages.push(format!("Error creating pending autostop: {}", e));
+                                }
+                            }
+                        }
+                    }
+
                     self.refresh_orders().await?;
                 }
                 ServerPayload::OrderCancelled { order_id } => {
@@ -1529,6 +1635,21 @@ impl App {
                 ServerPayload::Pong => {}
                 ServerPayload::ChartSubscribed => {}
                 ServerPayload::AccountInfo(_) => {}
+                ServerPayload::PendingAutostopCreated { limit_order_id } => {
+                    self.messages.push(format!("Pending autostop created for order {}", limit_order_id));
+                }
+                ServerPayload::PendingAutostopUpdated { limit_order_id } => {
+                    self.messages.push(format!("Pending autostop updated for order {}", limit_order_id));
+                }
+                ServerPayload::PendingAutostopCancelled { limit_order_id } => {
+                    self.messages.push(format!("Pending autostop cancelled for order {}", limit_order_id));
+                }
+                ServerPayload::PendingAutostopActivated { limit_order_id, symbol } => {
+                    self.messages.push(format!("Pending autostop activated for order {} ({})", limit_order_id, symbol.0));
+                }
+                ServerPayload::PendingAutostops(pending_autostops) => {
+                    self.pending_autostops = pending_autostops;
+                }
             }
         }
 

@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::path::PathBuf;
-use trade_shared::{PersistedActivityStopState, Side};
+use trade_shared::{PersistedActivityStopState, PendingAutostopCommand, Side};
 
 pub const ACTIVITY_STOPS: TableDefinition<&str, &[u8]> = TableDefinition::new("activity_stops");
+pub const PENDING_AUTOSTOPS: TableDefinition<&str, &[u8]> = TableDefinition::new("pending_autostops");
 
 fn make_key(state: &PersistedActivityStopState) -> String {
     make_key_from_parts(&state.symbol.0, state.side)
@@ -37,6 +38,7 @@ pub fn init_database() -> Result<Database> {
     let write_txn = db.begin_write()?;
     {
         let _ = write_txn.open_table(ACTIVITY_STOPS)?;
+        let _ = write_txn.open_table(PENDING_AUTOSTOPS)?;
     }
     write_txn.commit()?;
 
@@ -122,6 +124,90 @@ pub fn load_all_activity_stops(db: &Database) -> Result<Vec<PersistedActivitySto
 
     tracing::info!("Loaded {} panic stop states from database", states.len());
     Ok(states)
+}
+
+fn make_pending_key(limit_order_id: &str) -> String {
+    format!("pending:{}", limit_order_id)
+}
+
+pub fn save_pending_autostop(db: &Database, cmd: &PendingAutostopCommand) -> Result<()> {
+    let key = make_pending_key(&cmd.limit_order_id);
+    let serialized = serde_json::to_vec(cmd)
+        .context("Failed to serialize PendingAutostopCommand")?;
+
+    let write_txn = db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(PENDING_AUTOSTOPS)?;
+        table.insert(key.as_str(), serialized.as_slice())?;
+    }
+    write_txn.commit()?;
+
+    tracing::debug!("Saved pending autostop for order {}", cmd.limit_order_id);
+    Ok(())
+}
+
+pub fn load_pending_autostop(
+    db: &Database,
+    limit_order_id: &str,
+) -> Result<Option<PendingAutostopCommand>> {
+    let key = make_pending_key(limit_order_id);
+
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(PENDING_AUTOSTOPS)?;
+
+    match table.get(key.as_str())? {
+        Some(value) => {
+            let cmd: PendingAutostopCommand = serde_json::from_slice(value.value())
+                .context("Failed to deserialize PendingAutostopCommand")?;
+            tracing::debug!("Loaded pending autostop for order {}", limit_order_id);
+            Ok(Some(cmd))
+        }
+        None => {
+            tracing::debug!("No pending autostop found for order {}", limit_order_id);
+            Ok(None)
+        }
+    }
+}
+
+pub fn delete_pending_autostop(db: &Database, limit_order_id: &str) -> Result<()> {
+    let key = make_pending_key(limit_order_id);
+
+    let write_txn = db.begin_write()?;
+    {
+        let mut table = write_txn.open_table(PENDING_AUTOSTOPS)?;
+        table.remove(key.as_str())?;
+    }
+    write_txn.commit()?;
+
+    tracing::debug!("Deleted pending autostop for order {}", limit_order_id);
+    Ok(())
+}
+
+pub fn load_all_pending_autostops(db: &Database) -> Result<Vec<PendingAutostopCommand>> {
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(PENDING_AUTOSTOPS)?;
+
+    let mut commands = Vec::new();
+
+    for entry in table.iter()? {
+        let (key, value) = entry?;
+        match serde_json::from_slice::<PendingAutostopCommand>(value.value()) {
+            Ok(cmd) => {
+                tracing::debug!("Loaded pending autostop for {}", key.value());
+                commands.push(cmd);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to deserialize pending autostop for {}: {}",
+                    key.value(),
+                    e
+                );
+            }
+        }
+    }
+
+    tracing::info!("Loaded {} pending autostops from database", commands.len());
+    Ok(commands)
 }
 
 #[cfg(test)]

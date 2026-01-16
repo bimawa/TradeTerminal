@@ -186,12 +186,121 @@ async fn handle_connection(
     let tx_clone = tx.clone();
     let activity_stop_for_ws = activity_stop_state.clone();
     let db_for_ws = db.clone();
+    let bybit_for_ws = bybit_for_timer.clone();
     let ws_event_task = tokio::spawn(async move {
         while let Some(event) = ws_event_rx.recv().await {
             let msg = match event {
                 WsEvent::OrderUpdate(data) => {
-                    match serde_json::from_value(data.clone()) {
-                        Ok(orders) => Some(ServerMessage::new(ServerPayload::Orders(orders))),
+                    match serde_json::from_value::<Vec<trade_shared::Order>>(data.clone()) {
+                        Ok(orders) => {
+                            for order in &orders {
+                                if matches!(order.status, trade_shared::OrderStatus::Filled | trade_shared::OrderStatus::PartiallyFilled) {
+                                    if let Ok(Some(pending)) = db::load_pending_autostop(&db_for_ws, &order.id) {
+                                        tracing::info!(
+                                            order_id = %order.id,
+                                            symbol = %pending.symbol,
+                                            autostop_type = ?pending.autostop_type,
+                                            "Limit order filled, activating pending autostop"
+                                        );
+
+                                        match pending.autostop_type {
+                                            trade_shared::AutostopType::Trailing => {
+                                                if let (Some(trailing_stop), active_price) = (
+                                                    pending.autostop_params.trailing_stop,
+                                                    pending.autostop_params.active_price,
+                                                ) {
+                                                    if let Err(e) = bybit_for_ws.set_trailing_stop(
+                                                        &pending.symbol,
+                                                        pending.side,
+                                                        trailing_stop,
+                                                        active_price,
+                                                    ).await {
+                                                        tracing::error!(
+                                                            order_id = %order.id,
+                                                            error = %e,
+                                                            "Failed to activate trailing stop"
+                                                        );
+                                                    } else {
+                                                        tracing::info!(
+                                                            order_id = %order.id,
+                                                            symbol = %pending.symbol,
+                                                            "Trailing stop activated successfully"
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            trade_shared::AutostopType::Activity => {
+                                                if let (Some(timeout_secs), trigger_price) = (
+                                                    pending.autostop_params.timeout_secs,
+                                                    pending.autostop_params.trigger_price,
+                                                ) {
+                                                    let active = trigger_price.is_none();
+                                                    let start_timestamp = std::time::SystemTime::now()
+                                                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                                                        .map(|d| d.as_millis() as i64)
+                                                        .unwrap_or(0);
+
+                                                    let persisted = trade_shared::PersistedActivityStopState {
+                                                        symbol: pending.symbol.clone(),
+                                                        side: pending.side,
+                                                        timeout_ms: timeout_secs as u64 * 1000,
+                                                        trigger_price,
+                                                        start_timestamp,
+                                                        active,
+                                                    };
+
+                                                    if let Err(e) = db::save_activity_stop(&db_for_ws, &persisted) {
+                                                        tracing::error!("Failed to save activity stop: {:#}", e);
+                                                    }
+
+                                                    let state = ActivityStopState {
+                                                        persisted,
+                                                        last_trade_time: tokio::time::Instant::now(),
+                                                    };
+
+                                                    *activity_stop_for_ws.lock().await = Some(state);
+
+                                                    tracing::info!(
+                                                        order_id = %order.id,
+                                                        symbol = %pending.symbol,
+                                                        "Activity stop activated successfully"
+                                                    );
+                                                }
+                                            }
+                                        }
+
+                                        if let Err(e) = db::delete_pending_autostop(&db_for_ws, &order.id) {
+                                            tracing::warn!(error = %e, "Failed to delete pending autostop");
+                                        }
+
+                                        let activation_msg = ServerMessage::new(ServerPayload::PendingAutostopActivated {
+                                            limit_order_id: order.id.clone(),
+                                            symbol: pending.symbol.clone(),
+                                        });
+                                        let _ = tx_clone.send(activation_msg).await;
+                                    }
+                                }
+
+                                if order.status == trade_shared::OrderStatus::Cancelled {
+                                    if let Ok(Some(_)) = db::load_pending_autostop(&db_for_ws, &order.id) {
+                                        tracing::info!(
+                                            order_id = %order.id,
+                                            "Limit order cancelled, removing pending autostop"
+                                        );
+                                        if let Err(e) = db::delete_pending_autostop(&db_for_ws, &order.id) {
+                                            tracing::warn!(error = %e, "Failed to delete pending autostop");
+                                        }
+
+                                        let cancel_msg = ServerMessage::new(ServerPayload::PendingAutostopCancelled {
+                                            limit_order_id: order.id.clone(),
+                                        });
+                                        let _ = tx_clone.send(cancel_msg).await;
+                                    }
+                                }
+                            }
+
+                            Some(ServerMessage::new(ServerPayload::Orders(orders)))
+                        }
                         Err(e) => {
                             tracing::warn!(error = %e, data = ?data, "Failed to parse order update");
                             None
