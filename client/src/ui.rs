@@ -36,12 +36,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
-    let titles = vec!["Orders", "Positions", "Trade", "Chart", "Autostops"];
+    let titles = vec!["Trade", "Chart", "Orders", "Positions", "Autostops"];
     let selected = match app.tab {
-        Tab::Orders => 0,
-        Tab::Positions => 1,
-        Tab::Trade => 2,
-        Tab::Chart => 3,
+        Tab::Trade => 0,
+        Tab::Chart => 1,
+        Tab::Orders => 2,
+        Tab::Positions => 3,
         Tab::Autostops => 4,
     };
 

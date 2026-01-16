@@ -102,11 +102,11 @@ pub enum InputMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
+    Trade,
+    Chart,
     Orders,
     Positions,
     Autostops,
-    Trade,
-    Chart,
 }
 
 pub struct App {
@@ -281,11 +281,11 @@ impl App {
                 }
                 KeyCode::Tab => {
                     self.tab = match self.tab {
-                        Tab::Orders => Tab::Positions,
-                        Tab::Positions => Tab::Trade,
                         Tab::Trade => Tab::Chart,
-                        Tab::Chart => Tab::Autostops,
-                        Tab::Autostops => Tab::Orders,
+                        Tab::Chart => Tab::Orders,
+                        Tab::Orders => Tab::Positions,
+                        Tab::Positions => Tab::Autostops,
+                        Tab::Autostops => Tab::Trade,
                     };
                     if self.tab == Tab::Chart && self.candles.is_empty() {
                         self.refresh_candles().await?;
@@ -293,11 +293,11 @@ impl App {
                 }
                 KeyCode::BackTab => {
                     self.tab = match self.tab {
-                        Tab::Orders => Tab::Autostops,
-                        Tab::Positions => Tab::Orders,
-                        Tab::Trade => Tab::Positions,
+                        Tab::Trade => Tab::Autostops,
                         Tab::Chart => Tab::Trade,
-                        Tab::Autostops => Tab::Chart,
+                        Tab::Orders => Tab::Chart,
+                        Tab::Positions => Tab::Orders,
+                        Tab::Autostops => Tab::Positions,
                     };
                     if self.tab == Tab::Chart && self.candles.is_empty() {
                         self.refresh_candles().await?;
@@ -431,11 +431,11 @@ impl App {
                     }
                     KeyCode::Tab => {
                         self.tab = match self.tab {
-                            Tab::Orders => Tab::Positions,
-                            Tab::Positions => Tab::Trade,
                             Tab::Trade => Tab::Chart,
-                            Tab::Chart => Tab::Autostops,
-                            Tab::Autostops => Tab::Orders,
+                            Tab::Chart => Tab::Orders,
+                            Tab::Orders => Tab::Positions,
+                            Tab::Positions => Tab::Autostops,
+                            Tab::Autostops => Tab::Trade,
                         };
                         if self.tab == Tab::Chart && self.candles.is_empty() {
                             self.refresh_candles().await?;
@@ -443,11 +443,11 @@ impl App {
                     }
                     KeyCode::BackTab => {
                         self.tab = match self.tab {
-                            Tab::Orders => Tab::Autostops,
-                            Tab::Positions => Tab::Orders,
-                            Tab::Trade => Tab::Positions,
+                            Tab::Trade => Tab::Autostops,
                             Tab::Chart => Tab::Trade,
-                            Tab::Autostops => Tab::Chart,
+                            Tab::Orders => Tab::Chart,
+                            Tab::Positions => Tab::Orders,
+                            Tab::Autostops => Tab::Positions,
                         };
                         if self.tab == Tab::Chart && self.candles.is_empty() {
                             self.refresh_candles().await?;
