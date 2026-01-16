@@ -4,4 +4,5 @@ defaults:
 
 hooks:
   skip_tests: false
-  allow_main_push: false
+  allow_main_push: true
+  skip_commit_advisory: true
