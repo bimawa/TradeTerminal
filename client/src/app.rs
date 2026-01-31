@@ -1012,11 +1012,24 @@ impl App {
         let sl_arg = args[1];
         let sl_is_percent = sl_arg.ends_with('%');
 
-        let limit_price = args.get(2).and_then(|p| {
-            if p == &"-" { None } else { Decimal::from_str(p).ok() }
-        });
-
-        let tp_value = args.get(3).and_then(|p| parse_value(p));
+        let (limit_price, tp_value) = if let Some(arg2) = args.get(2) {
+            if arg2 == &"-" {
+                (None, args.get(3).and_then(|p| parse_value(p)))
+            } else if let Some(val) = parse_value(arg2) {
+                match val {
+                    Value::Ratio(_, _) | Value::Percent(_) => {
+                        (None, Some(val))
+                    }
+                    Value::Absolute(price) => {
+                        (Some(price), args.get(3).and_then(|p| parse_value(p)))
+                    }
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
 
         if sl_is_percent {
             let sl_percent = match Decimal::from_str(sl_arg.trim_end_matches('%')) {
@@ -1122,7 +1135,7 @@ impl App {
                 Value::Absolute(price) => price,
                 Value::Ratio(numerator, denominator) => {
                     let sl_distance = (entry_price - sl_price).abs();
-                    let multiplier = Decimal::from(numerator) / Decimal::from(denominator);
+                    let multiplier = Decimal::from(denominator) / Decimal::from(numerator);
                     let tp_distance = sl_distance * multiplier;
                     match side {
                         Side::Buy => entry_price + tp_distance,
