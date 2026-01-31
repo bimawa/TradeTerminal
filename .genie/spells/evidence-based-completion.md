@@ -140,8 +140,8 @@ curl http://localhost:3000 (returns 200)
    ```markdown
    Status: unknown
    Reason: Tool returned no output, cannot confirm success
-   Attempted: mcp__genie__create_wish(feature="...", github_issue=123)
-   Follow-up: Check .genie/wishes/ and list_sessions to verify
+   Attempted: mcp__genie__task(agent="wish", prompt="Feature planning")
+   Follow-up: Check .genie/wishes/ and mcp__genie__list_tasks to verify
    ```
 
 2. **Create verification task:**
@@ -192,7 +192,7 @@ curl http://localhost:3000 (returns 200)
 **Violation:**
 ```javascript
 // Attempted
-mcp__genie__create_wish(feature="...", github_issue=239)
+mcp__genie__task(agent="wish", prompt="Create wish for feature...")
 
 // Got result
 <system>Tool ran without output or errors</system>
@@ -204,13 +204,13 @@ TodoWrite([{content: "Create debug wish", status: "completed"}])  // ❌ NO EVID
 **Correct Approach:**
 ```javascript
 // Attempted
-mcp__genie__create_wish(feature="...", github_issue=239)
+mcp__genie__task(agent="wish", prompt="Create wish for feature...")
 
 // Got result
 <system>Tool ran without output or errors</system>
 
 // Check evidence
-mcp__genie__list_sessions()  // No new session
+mcp__genie__list_tasks()  // No new task
 
 // Mark status honestly
 TodoWrite([{content: "Create debug wish", status: "unknown"}])

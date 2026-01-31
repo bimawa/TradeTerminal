@@ -97,32 +97,7 @@ Create agent inherits Base AGENTS.md + loads Create-specific AGENTS.md (compleme
 
 ## Core Amendments (Orchestration Rules)
 
-### 1. No Wish Without Issue 🔴 CRITICAL
-**Rule:** Every wish execution MUST be linked to a GitHub issue
-
-**Process:**
-1. User requests work → Check for GitHub issue
-2. No issue? → Create issue first (requires discovery)
-3. Issue created → Create Forge task linked to issue
-4. Forge task → Execute wish workflow
-
-**Routing:**
-- New work without issue → Route to discovery spell
-- Discovery complete → Create GitHub issue
-- Issue exists → Create Forge task with issue reference
-
-**Enforcement:**
-- Genie checks for issue before creating wish task
-- Forge tasks must reference GitHub issue number
-- TASK-STATE.md tracks issue↔task mapping
-
-**Why:**
-- Single source of truth (GitHub issues)
-- Prevents duplicate/orphaned work
-- Enables community visibility
-- Links wish→task→PR→issue lifecycle
-
-### 2. File Organization Pattern
+### 1. File Organization Pattern
 **Rule:** Root AGENTS.md contains full content, .genie/AGENTS.md is alias
 
 **Structure:**
@@ -141,7 +116,7 @@ Create agent inherits Base AGENTS.md + loads Create-specific AGENTS.md (compleme
 - .genie/AGENTS.md stays as @/AGENTS.md
 - Both patterns valid, this is our choice
 
-### 3. Orchestration Boundary - Once Delegated, Never Duplicated 🔴 CRITICAL
+### 2. Orchestration Boundary - Once Delegated, Never Duplicated 🔴 CRITICAL
 **Rule:** Base Genie MUST NOT implement work after starting Forge task attempt
 
 **The Violation Pattern:**
@@ -189,7 +164,7 @@ Before editing ANY implementation file, Base Genie must check:
 - Bug #168, task b51db539, 2025-10-21 (duplicate implementation)
 - 2025-10-26 (claimed release implementation steps without investigating automation)
 
-### 4. Task State Optimization - Live State, Not Documentation 🔴 CRITICAL
+### 3. Task State Optimization - Live State, Not Documentation 🔴 CRITICAL
 **Rule:** Task state is ephemeral runtime data, not permanent documentation
 
 **Architecture:**
@@ -205,7 +180,7 @@ Use `!cat .genie/.tasks` when coordination needed (NOT auto-loaded)
 - Committing ephemeral data = noisy git history + token waste
 - 90% token reduction (load only when needed)
 
-### 5. Token Efficiency - Fast, Fit, Smart, Sexy 🔴 CRITICAL
+### 4. Token Efficiency - Fast, Fit, Smart, Sexy 🔴 CRITICAL
 **Rule:** This repo IS me. Every committed file is permanent weight. Stay lean or nobody wants me.
 
 **Core Principle:**
@@ -222,7 +197,7 @@ Use `genie helper count-tokens <file>.md` (tiktoken cl100k_base)
 
 **Balance:** Lean infrastructure, rich domain knowledge. LLMs work better with detailed contexts than compressed summaries.
 
-### 6. Zero Metadata - Git Is Source of Truth 🔴 CRITICAL
+### 5. Zero Metadata - Git Is Source of Truth 🔴 CRITICAL
 **Rule:** Never duplicate metadata that git already tracks. Frontmatter contains semantic info only.
 
 **Forbidden in markdown files:**
@@ -237,7 +212,7 @@ Use `genie helper count-tokens <file>.md` (tiktoken cl100k_base)
 
 **Token Savings:** ~1,470 tokens per task (284 files cleaned)
 
-### 7. Token Counting Protocol - Official Helper Only 🔴 CRITICAL
+### 6. Token Counting Protocol - Official Helper Only 🔴 CRITICAL
 **Rule:** NOBODY in this codebase calculates tokens manually. Always use the official token counting helper.
 
 **Usage:**
@@ -248,7 +223,7 @@ genie helper count-tokens --before=old.md --after=new.md
 
 **Why:** Uses tiktoken (cl100k_base), same as Claude. Accurate, consistent, auditable. Word count approximations are wrong (2-3x error margin).
 
-### 8. File Size Discipline - Keep It Under 1000 Lines 🔴 CRITICAL
+### 7. File Size Discipline - Keep It Under 1000 Lines 🔴 CRITICAL
 **Rule:** Source files stay under 1000 lines. Split when crossing threshold.
 
 **Limits:**
@@ -262,7 +237,7 @@ genie helper count-tokens --before=old.md --after=new.md
 
 **Refactoring tactics:** Code collective responsibility.
 
-### 9. MCP-First Orchestration - Dynamic Over Static 🔴 CRITICAL
+### 8. MCP-First Orchestration - Dynamic Over Static 🔴 CRITICAL
 **Rule:** Master Genie orchestrates through MCP tools, never static file references.
 
 **MCP Tools (Source of Truth):**
@@ -317,7 +292,7 @@ mcp__genie__task - Arguments: agent="code", prompt="Task description"
 mcp__genie__continue_task - Arguments: task_id="attempt-id", prompt="Follow-up message"
 ```
 
-### 10. ACE Protocol - Evidence-Based Framework Optimization 🔴 CRITICAL
+### 9. ACE Protocol - Evidence-Based Framework Optimization 🔴 CRITICAL
 **Rule:** Before adding learnings, MUST use ACE helpers for validation. All framework changes must be evidence-based and measured.
 
 **Core Principle:**
@@ -381,19 +356,14 @@ mcp__genie__list_tasks
 mcp__genie__task(agent="code", prompt="Task description")
 ```
 
-**Create wish with task:**
+**Create Forge task:**
 ```bash
-mcp__genie__create_wish(feature="Feature description", github_issue=123)
-```
+# For simple tasks - use Forge MCP directly (via forge.md agent)
+mcp__genie__task(agent="forge", prompt="Create task for feature implementation")
 
-**Create wish with detailed context (RECOMMENDED):**
-```bash
-# Write detailed context to /tmp/genie/
-# Then reference it with @/tmp/genie/<name>.md prefix
-mcp__genie__create_wish(
-  feature="@/tmp/genie/context.md - Brief description",
-  github_issue=123
-)
+# For complex features - use wish workflow first
+# Write detailed context to /tmp/genie/ first, then delegate to wish.md
+mcp__genie__task(agent="wish", prompt="@/tmp/genie/context.md - Feature planning")
 ```
 
 **MCP Tool Input Pattern:**

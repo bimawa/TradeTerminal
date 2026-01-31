@@ -76,9 +76,9 @@ const SCHEMAS = {
     }
   },
   wish: {
-    required: ['github_issue', 'status'],
+    required: ['status'],
     fields: {
-      github_issue: { type: 'number', prompt: 'GitHub issue number' },
+      forge_task_id: { type: 'string', optional: true, prompt: 'Forge task ID (if applicable)' },
       status: { type: 'enum', values: ['DRAFT', 'ACTIVE', 'COMPLETE', 'BLOCKED'], default: 'DRAFT' },
       roadmap_item: { type: 'string', optional: true },
       mission_link: { type: 'string', optional: true }
@@ -197,10 +197,10 @@ function extractFromContent(content, type) {
 
   // Type-specific extraction
   if (type === 'wish') {
-    // Extract GitHub issue number
-    const issueMatch = content.match(/(?:GitHub Issue|Issue):\s*#?(\d+)/i);
-    if (issueMatch) {
-      extracted.github_issue = parseInt(issueMatch[1]);
+    // Extract Forge task ID
+    const taskMatch = content.match(/(?:Forge Task|Task ID):\s*([a-f0-9-]+)/i);
+    if (taskMatch) {
+      extracted.forge_task_id = taskMatch[1];
     }
 
     // Extract status

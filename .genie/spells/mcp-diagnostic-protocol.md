@@ -105,12 +105,12 @@ mcp__genie__create_wish(...)
 **Example:**
 ```javascript
 // This failed (WebSocket):
-mcp__genie__create_wish(feature="...", github_issue=123)
+mcp__genie__task(agent="wish", prompt="Create wish for feature X")
 
-// Try non-WebSocket alternative:
-mcp__genie__run(
-  agent="wish",
-  prompt="Create wish for feature X linked to issue #123"
+// Try alternative approach - direct Forge task creation:
+mcp__genie__task(
+  agent="forge",
+  prompt="Create Forge task for feature X implementation"
 )
 ```
 
