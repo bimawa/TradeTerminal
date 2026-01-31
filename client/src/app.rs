@@ -1349,18 +1349,6 @@ impl App {
             }
         };
 
-        let trigger_price = if args.len() >= 2 {
-            match Decimal::from_str(args[1]) {
-                Ok(v) => Some(v),
-                Err(_) => {
-                    self.messages.push("Invalid trigger price".to_string());
-                    return Ok(());
-                }
-            }
-        } else {
-            None
-        };
-
         let position_side = match side {
             Some(s) => s,
             None => {
@@ -1373,6 +1361,45 @@ impl App {
                     }
                 }
             }
+        };
+
+        let trigger_price = if args.len() >= 2 {
+            match parse_value(args[1]) {
+                Some(Value::Absolute(v)) => Some(v),
+                Some(Value::Ratio(numerator, denominator)) => {
+                    let pos = self.positions.iter().find(|p| p.symbol.0 == self.symbol && p.side == position_side);
+                    match pos {
+                        Some(p) => {
+                            if let Some(sl) = p.stop_loss {
+                                let sl_distance = (sl - p.entry_price).abs();
+                                let multiplier = Decimal::from(denominator) / Decimal::from(numerator);
+                                let trigger_distance = sl_distance * multiplier;
+                                Some(match position_side {
+                                    Side::Buy => p.entry_price + trigger_distance,
+                                    Side::Sell => p.entry_price - trigger_distance,
+                                })
+                            } else {
+                                self.messages.push("No SL set, cannot calculate ratio trigger".to_string());
+                                return Ok(());
+                            }
+                        }
+                        None => {
+                            self.messages.push("Position not found for ratio trigger".to_string());
+                            return Ok(());
+                        }
+                    }
+                }
+                Some(Value::Percent(_)) => {
+                    self.messages.push("Percent not supported for activity stop trigger, use ratio or absolute".to_string());
+                    return Ok(());
+                }
+                None => {
+                    self.messages.push("Invalid trigger value".to_string());
+                    return Ok(());
+                }
+            }
+        } else {
+            None
         };
 
         let req = ActivityStopRequest {
@@ -1469,7 +1496,7 @@ impl App {
         self.messages.push("  close [l|s]                    - Close position (auto if one)".to_string());
         self.messages.push("  symbol <sym>                   - Set symbol".to_string());
         self.messages.push("  ts <trigger> <callback>        - Set trailing stop (% or abs)".to_string());
-        self.messages.push("  as <secs> [trigger]            - Activity stop (auto-close after N sec)".to_string());
+        self.messages.push("  as <secs> [trigger|ratio]      - Activity stop (auto-close after N sec)".to_string());
         self.messages.push("  chart                          - Open chart view".to_string());
         self.messages.push("  tf <1|5|15|30|60|240|D|W>      - Set timeframe".to_string());
         self.messages.push("  level <price>                  - Add price level".to_string());
