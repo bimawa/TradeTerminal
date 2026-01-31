@@ -68,7 +68,7 @@ struct PendingRiskOrder {
     sl_price: Decimal,
     sl_percent: Option<Decimal>,
     symbol: String,
-    tp_percent: Option<Decimal>,
+    tp_value: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -1016,7 +1016,7 @@ impl App {
             if p == &"-" { None } else { Decimal::from_str(p).ok() }
         });
 
-        let tp_percent = args.get(3).and_then(|p| Decimal::from_str(p).ok());
+        let tp_value = args.get(3).and_then(|p| parse_value(p));
 
         if sl_is_percent {
             let sl_percent = match Decimal::from_str(sl_arg.trim_end_matches('%')) {
@@ -1032,7 +1032,7 @@ impl App {
                     Side::Buy => entry_price * (Decimal::ONE - sl_percent / Decimal::from(100)),
                     Side::Sell => entry_price * (Decimal::ONE + sl_percent / Decimal::from(100)),
                 };
-                self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_percent).await?;
+                self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_value).await?;
             } else {
                 self.pending_risk_order = Some(PendingRiskOrder {
                     side,
@@ -1040,7 +1040,7 @@ impl App {
                     sl_price: Decimal::ZERO,
                     sl_percent: Some(sl_percent),
                     symbol: self.symbol.clone(),
-                    tp_percent,
+                    tp_value,
                 });
                 self.messages.push("Fetching price...".to_string());
                 self.refresh_ticker().await?;
@@ -1055,7 +1055,7 @@ impl App {
             };
 
             if let Some(entry_price) = limit_price {
-                self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_percent).await?;
+                self.execute_risk_order(side, risk_usdt, sl_price, Some(entry_price), tp_value).await?;
             } else {
                 self.pending_risk_order = Some(PendingRiskOrder {
                     side,
@@ -1063,7 +1063,7 @@ impl App {
                     sl_price,
                     sl_percent: None,
                     symbol: self.symbol.clone(),
-                    tp_percent,
+                    tp_value,
                 });
                 self.messages.push("Fetching price...".to_string());
                 self.refresh_ticker().await?;
@@ -1079,7 +1079,7 @@ impl App {
         risk_usdt: Decimal,
         sl_price: Decimal,
         limit_price: Option<Decimal>,
-        tp_percent: Option<Decimal>,
+        tp_value: Option<Value>,
     ) -> Result<()> {
         let is_limit = limit_price.is_some();
         let entry_price = limit_price.unwrap_or_else(|| self.last_price.unwrap_or_default());
@@ -1110,11 +1110,25 @@ impl App {
         let quantity = round_quantity(calc.quantity, 0);
         let order_type = if is_limit { OrderType::Limit } else { OrderType::Market };
 
-        let take_profit = tp_percent.map(|pct| {
-            let multiplier = pct / Decimal::from(100);
-            match side {
-                Side::Buy => entry_price * (Decimal::ONE + multiplier),
-                Side::Sell => entry_price * (Decimal::ONE - multiplier),
+        let take_profit = tp_value.map(|val| {
+            match val {
+                Value::Percent(pct) => {
+                    let multiplier = pct / Decimal::from(100);
+                    match side {
+                        Side::Buy => entry_price * (Decimal::ONE + multiplier),
+                        Side::Sell => entry_price * (Decimal::ONE - multiplier),
+                    }
+                }
+                Value::Absolute(price) => price,
+                Value::Ratio(numerator, denominator) => {
+                    let sl_distance = (entry_price - sl_price).abs();
+                    let multiplier = Decimal::from(numerator) / Decimal::from(denominator);
+                    let tp_distance = sl_distance * multiplier;
+                    match side {
+                        Side::Buy => entry_price + tp_distance,
+                        Side::Sell => entry_price - tp_distance,
+                    }
+                }
             }
         });
 
@@ -1432,10 +1446,11 @@ impl App {
 
     fn show_help(&mut self) {
         self.messages.push("Commands:".to_string());
-        self.messages.push("  buy <qty> [price]              - Place buy order (market/limit)".to_string());
-        self.messages.push("  sell <qty> [price]             - Place sell order (market/limit)".to_string());
-        self.messages.push("  buyrisk <risk$> <sl|sl%> [lim] - Long with risk calc".to_string());
-        self.messages.push("  sellrisk <risk$> <sl|sl%> [lim]- Short with risk calc".to_string());
+        self.messages.push("  buy <qty> [price]                    - Place buy order (market/limit)".to_string());
+        self.messages.push("  sell <qty> [price]                   - Place sell order (market/limit)".to_string());
+        self.messages.push("  buyrisk <risk$> <sl|sl%> [lim] [tp]  - Long with risk calc".to_string());
+        self.messages.push("  sellrisk <risk$> <sl|sl%> [lim] [tp] - Short with risk calc".to_string());
+        self.messages.push("    tp can be: 2% (percent), 1/3 (ratio), or absolute price".to_string());
         self.messages.push("  cancel <id>                    - Cancel order".to_string());
         self.messages.push("  cancelall                      - Cancel all orders".to_string());
         self.messages.push("  close [l|s]                    - Close position (auto if one)".to_string());
@@ -1636,7 +1651,7 @@ impl App {
                                 pending.risk_usdt,
                                 sl_price,
                                 None,
-                                pending.tp_percent,
+                                pending.tp_value,
                             ).await {
                                 self.messages.push(format!("Order error: {}", e));
                             }
