@@ -12,7 +12,7 @@ use trade_shared::{
     calculate_position_size, round_quantity, AutostopParams, AutostopType, Candle, ClientMessage,
     ClientPayload, ClosePositionRequest, Order, OrderRequest, OrderType, ActivityStopRequest,
     PendingAutostopCommand, PendingAutostopConfig, Position, RiskError, ServerMessage, ServerPayload,
-    Side, Symbol, TimeInForce, Trade, TrailingStopRequest,
+    Side, Symbol, TimeInForce, Trade, TrailingStopRequest, TrailingStopTarget,
 };
 
 use crate::audio::AudioPlayer;
@@ -82,12 +82,23 @@ struct PendingAction {
 enum Value {
     Percent(Decimal),
     Absolute(Decimal),
+    Ratio(u32, u32),
 }
 
 fn parse_value(s: &str) -> Option<Value> {
     if s.ends_with('%') {
         let num = s.trim_end_matches('%');
         Decimal::from_str(num).ok().map(Value::Percent)
+    } else if s.contains('/') {
+        let parts: Vec<&str> = s.split('/').collect();
+        if parts.len() == 2 {
+            if let (Ok(num), Ok(denom)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                if denom > 0 {
+                    return Some(Value::Ratio(num, denom));
+                }
+            }
+        }
+        None
     } else {
         Decimal::from_str(s).ok().map(Value::Absolute)
     }
@@ -756,7 +767,7 @@ impl App {
                             side,
                             autostop_type: AutostopType::Trailing,
                             params: AutostopParams {
-                                trailing_stop: Some(callback),
+                                trailing_stop_target: Some(TrailingStopTarget::Absolute(callback)),
                                 active_price: Some(trigger),
                                 timeout_secs: None,
                                 trigger_price: None,
@@ -785,7 +796,7 @@ impl App {
                             side,
                             autostop_type: AutostopType::Activity,
                             params: AutostopParams {
-                                trailing_stop: None,
+                                trailing_stop_target: None,
                                 active_price: None,
                                 timeout_secs: Some(timeout_secs),
                                 trigger_price,
@@ -1243,27 +1254,60 @@ impl App {
                 Side::Sell => entry_price * (Decimal::ONE - pct / Decimal::from(100)),
             },
             Value::Absolute(price) => price,
+            Value::Ratio(numerator, denominator) => {
+                let pos = self.positions.iter().find(|p| p.symbol.0 == self.symbol && p.side == position_side);
+                match pos {
+                    Some(p) => {
+                        if let Some(sl) = p.stop_loss {
+                            let sl_distance = (sl - p.entry_price).abs();
+                            let multiplier = Decimal::from(denominator) / Decimal::from(numerator);
+                            let trigger_distance = sl_distance * multiplier;
+                            match position_side {
+                                Side::Buy => p.entry_price + trigger_distance,
+                                Side::Sell => p.entry_price - trigger_distance,
+                            }
+                        } else {
+                            self.messages.push("No SL set, cannot calculate ratio trigger".to_string());
+                            return Ok(());
+                        }
+                    }
+                    None => {
+                        self.messages.push("Position not found for ratio trigger".to_string());
+                        return Ok(());
+                    }
+                }
+            }
         };
 
-        let trailing_stop = match callback {
-            Value::Percent(pct) => active_price * pct / Decimal::from(100),
-            Value::Absolute(val) => val,
+        let target = match callback {
+            Value::Percent(pct) => TrailingStopTarget::Percentage(pct),
+            Value::Absolute(val) => TrailingStopTarget::Absolute(val),
+            Value::Ratio(_, _) => {
+                self.messages.push("Ratio not supported for callback, use % or absolute".to_string());
+                return Ok(());
+            }
         };
 
         let req = TrailingStopRequest {
             symbol: Symbol::new(&self.symbol),
             side: position_side,
-            trailing_stop,
+            target,
             active_price: Some(active_price),
         };
 
         let msg = ClientMessage::new(ClientPayload::SetTrailingStop(req));
         self.conn_tx.send(msg).await?;
 
+        let target_display = match target {
+            TrailingStopTarget::Absolute(val) => format!("{}", val),
+            TrailingStopTarget::Percentage(pct) => format!("{}%", pct),
+            TrailingStopTarget::Ratio { numerator, denominator } => format!("{}/{}", numerator, denominator),
+        };
+
         self.messages.push(format!(
             "Setting TS: {} trigger@{}, callback {}",
             if position_side == Side::Buy { "LONG" } else { "SHORT" },
-            active_price, trailing_stop
+            active_price, target_display
         ));
 
         Ok(())

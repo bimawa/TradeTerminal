@@ -3,7 +3,7 @@ use reqwest::Client;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use trade_shared::{Candle, Order, OrderRequest, OrderStatus, OrderType, Position, Side, Symbol, Ticker};
+use trade_shared::{Candle, Order, OrderRequest, OrderStatus, OrderType, Position, Side, Symbol, Ticker, TrailingStopTarget};
 
 use super::sign::generate_signature;
 use crate::config::Config;
@@ -415,13 +415,51 @@ impl BybitClient {
         Ok(candles)
     }
 
+    async fn resolve_trailing_stop_target(
+        &self,
+        symbol: &Symbol,
+        side: Side,
+        target: TrailingStopTarget,
+    ) -> Result<Decimal> {
+        match target {
+            TrailingStopTarget::Absolute(value) => Ok(value),
+            TrailingStopTarget::Percentage(pct) => {
+                let ticker = self.get_ticker(symbol).await?;
+                Ok(ticker.last_price * pct / Decimal::from(100))
+            }
+            TrailingStopTarget::Ratio { numerator, denominator } => {
+                let positions = self.get_positions(Some(symbol)).await?;
+                let position = positions
+                    .iter()
+                    .find(|p| p.side == side)
+                    .context("Position not found for this symbol and side")?;
+
+                let stop_loss = position.stop_loss
+                    .context("Stop loss not set, cannot calculate ratio target")?;
+
+                let sl_distance = (stop_loss - position.entry_price).abs();
+
+                let multiplier = Decimal::from(denominator) / Decimal::from(numerator);
+                let target_distance = sl_distance * multiplier;
+
+                let target_price = match side {
+                    Side::Buy => position.entry_price + target_distance,
+                    Side::Sell => position.entry_price - target_distance,
+                };
+
+                Ok(target_price)
+            }
+        }
+    }
+
     pub async fn set_trailing_stop(
         &self,
         symbol: &Symbol,
         side: Side,
-        trailing_stop: Decimal,
+        target: TrailingStopTarget,
         active_price: Option<Decimal>,
     ) -> Result<()> {
+        let trailing_stop = self.resolve_trailing_stop_target(symbol, side, target).await?;
         #[derive(Serialize)]
         struct TradingStopRequest {
             category: String,

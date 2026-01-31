@@ -205,14 +205,14 @@ async fn handle_connection(
 
                                         match pending.autostop_type {
                                             trade_shared::AutostopType::Trailing => {
-                                                if let (Some(trailing_stop), active_price) = (
-                                                    pending.autostop_params.trailing_stop,
+                                                if let (Some(target), active_price) = (
+                                                    pending.autostop_params.trailing_stop_target,
                                                     pending.autostop_params.active_price,
                                                 ) {
                                                     if let Err(e) = bybit_for_ws.set_trailing_stop(
                                                         &pending.symbol,
                                                         pending.side,
-                                                        trailing_stop,
+                                                        target,
                                                         active_price,
                                                     ).await {
                                                         tracing::error!(

@@ -166,6 +166,17 @@ pub struct ClosePositionRequest {
     pub side: Side,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", content = "value")]
+pub enum TrailingStopTarget {
+    #[serde(rename = "absolute")]
+    Absolute(Decimal),
+    #[serde(rename = "percentage")]
+    Percentage(Decimal),
+    #[serde(rename = "ratio")]
+    Ratio { numerator: u32, denominator: u32 },
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AutostopType {
@@ -175,7 +186,7 @@ pub enum AutostopType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutostopParams {
-    pub trailing_stop: Option<Decimal>,
+    pub trailing_stop_target: Option<TrailingStopTarget>,
     pub active_price: Option<Decimal>,
     pub timeout_secs: Option<u32>,
     pub trigger_price: Option<Decimal>,
@@ -453,5 +464,47 @@ mod tests {
         assert_eq!(parsed.trigger_price, Some(dec!(95000)));
         assert_eq!(parsed.start_timestamp, 1704384000000);
         assert!(parsed.active);
+    }
+
+    #[test]
+    fn test_trailing_stop_target_absolute_serialization() {
+        let target = TrailingStopTarget::Absolute(dec!(100.50));
+        let json = serde_json::to_string(&target).unwrap();
+        assert!(json.contains("\"type\":\"absolute\""));
+        assert!(json.contains("\"value\":\"100.50\""));
+
+        let parsed: TrailingStopTarget = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, TrailingStopTarget::Absolute(dec!(100.50)));
+    }
+
+    #[test]
+    fn test_trailing_stop_target_percentage_serialization() {
+        let target = TrailingStopTarget::Percentage(dec!(3.5));
+        let json = serde_json::to_string(&target).unwrap();
+        assert!(json.contains("\"type\":\"percentage\""));
+        assert!(json.contains("\"value\":\"3.5\""));
+
+        let parsed: TrailingStopTarget = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, TrailingStopTarget::Percentage(dec!(3.5)));
+    }
+
+    #[test]
+    fn test_trailing_stop_target_ratio_serialization() {
+        let target = TrailingStopTarget::Ratio { numerator: 1, denominator: 3 };
+        let json = serde_json::to_string(&target).unwrap();
+        assert!(json.contains("\"type\":\"ratio\""));
+        assert!(json.contains("\"numerator\":1"));
+        assert!(json.contains("\"denominator\":3"));
+
+        let parsed: TrailingStopTarget = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, TrailingStopTarget::Ratio { numerator: 1, denominator: 3 });
+    }
+
+    #[test]
+    fn test_trailing_stop_target_ratio_different_values() {
+        let target = TrailingStopTarget::Ratio { numerator: 1, denominator: 2 };
+        let json = serde_json::to_string(&target).unwrap();
+        let parsed: TrailingStopTarget = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, TrailingStopTarget::Ratio { numerator: 1, denominator: 2 });
     }
 }

@@ -196,6 +196,11 @@ fn draw_trade(f: &mut Frame, app: &App, area: Rect) {
         Line::from(Span::styled(" Shortcuts", Style::default().add_modifier(Modifier::BOLD))),
         Line::from("  :b :s :br :sr :cl :c :ca :ps"),
         Line::from("  |=pipe  ;=chain"),
+        Line::from(""),
+        Line::from(Span::styled(" TS Trigger Types", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from("  Absolute:   :ts 97000 2%"),
+        Line::from("  Percent:    :ts 2% 0.5%"),
+        Line::from("  Ratio:      :ts 1/3 2%    # 3x SL dist"),
     ];
 
     let help = Paragraph::new(help_text)
@@ -984,10 +989,17 @@ fn draw_autostops(f: &mut Frame, app: &App, area: Rect) {
 
         let params = match autostop.autostop_type {
             trade_shared::AutostopType::Trailing => {
+                let target_str = autostop.autostop_params.trailing_stop_target.as_ref().map(|t| {
+                    match t {
+                        trade_shared::TrailingStopTarget::Absolute(val) => format!("{}", val),
+                        trade_shared::TrailingStopTarget::Percentage(pct) => format!("{}%", pct),
+                        trade_shared::TrailingStopTarget::Ratio { numerator, denominator } => format!("{}/{}", numerator, denominator),
+                    }
+                }).unwrap_or_default();
                 format!(
                     "trigger: {}, callback: {}",
                     autostop.autostop_params.active_price.map(|p| p.to_string()).unwrap_or_default(),
-                    autostop.autostop_params.trailing_stop.map(|p| p.to_string()).unwrap_or_default()
+                    target_str
                 )
             }
             trade_shared::AutostopType::Activity => {

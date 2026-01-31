@@ -40,7 +40,7 @@ pub enum ClientPayload {
 pub struct TrailingStopRequest {
     pub symbol: Symbol,
     pub side: crate::Side,
-    pub trailing_stop: rust_decimal::Decimal,
+    pub target: crate::TrailingStopTarget,
     pub active_price: Option<rust_decimal::Decimal>,
 }
 
