@@ -846,12 +846,18 @@ fn draw_price_scale(f: &mut Frame, app: &App, area: Rect, chart_width: u16) {
 
 fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
     let has_activity_stop = app.activity_stop_remaining_ms.is_some();
+    let has_position = app.positions.iter().any(|p| p.symbol.0 == app.symbol);
     let available_lines = (area.height as usize).saturating_sub(2);
-    let trades_lines = if has_activity_stop {
-        available_lines.saturating_sub(1)
+
+    let indicator_lines = if has_activity_stop && has_position {
+        3
+    } else if has_activity_stop || has_position {
+        if has_position { 2 } else { 1 }
     } else {
-        available_lines
+        0
     };
+
+    let trades_lines = available_lines.saturating_sub(indicator_lines);
 
     let mut items: Vec<ListItem> = Vec::new();
 
@@ -873,6 +879,28 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
         };
         items.push(ListItem::new(Line::from(vec![
             Span::styled(status_str, timer_style),
+        ])));
+    }
+
+    let current_position = app.positions.iter().find(|p| p.symbol.0 == app.symbol);
+
+    if let Some(pos) = current_position {
+        let tp_str = if let Some(tp) = pos.take_profit {
+            format!("TP: {:>9}", tp)
+        } else {
+            "TP: ---      ".to_string()
+        };
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(tp_str, Style::default().fg(Color::Green)),
+        ])));
+
+        let ts_str = if let Some(ts) = pos.trailing_stop {
+            format!("TS: {:>9}", ts)
+        } else {
+            "TS: ---      ".to_string()
+        };
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(ts_str, Style::default().fg(Color::Yellow)),
         ])));
     }
 
