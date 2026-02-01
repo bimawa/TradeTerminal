@@ -923,7 +923,7 @@ fn draw_trades_tape(f: &mut Frame, app: &App, area: Rect) {
             ListItem::new(Line::from(vec![
                 Span::raw(format!("{} ", time)),
                 Span::styled(side_str, Style::default().fg(color)),
-                Span::raw(format!(" {:>9}", t.price)),
+                Span::raw(format!(" {:>9} {:>8}", t.price, t.qty)),
             ]))
         })
         .collect();

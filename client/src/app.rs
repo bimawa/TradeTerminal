@@ -1748,25 +1748,8 @@ impl App {
 
                     if self.use_tick_aggregation {
                         if let Some(ref mut aggregator) = self.tick_aggregator {
-                            if let Some(completed_candle) = aggregator.add_trade(&trade) {
-                                if let Some(last) = self.candles.last_mut() {
-                                    if last.timestamp == completed_candle.timestamp {
-                                        *last = completed_candle;
-                                    } else {
-                                        self.candles.push(completed_candle);
-                                        if self.candles.len() > 500 {
-                                            self.candles.remove(0);
-                                        }
-                                    }
-                                } else {
-                                    self.candles.push(completed_candle);
-                                }
-                            }
-
-                            let all_candles = aggregator.get_candles();
-                            if !all_candles.is_empty() {
-                                self.candles = all_candles;
-                            }
+                            aggregator.add_trade(&trade);
+                            self.candles = aggregator.get_candles();
                         }
                     }
 
