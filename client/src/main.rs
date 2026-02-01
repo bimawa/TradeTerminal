@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod connection;
+mod tick_aggregator;
 mod tls;
 mod ui;
 

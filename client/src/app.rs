@@ -16,6 +16,7 @@ use trade_shared::{
 };
 
 use crate::audio::AudioPlayer;
+use crate::tick_aggregator::{AggregationInterval, TickAggregator};
 
 struct Cmd {
     name: &'static str,
@@ -157,6 +158,8 @@ pub struct App {
     pub price_tracking: bool,
     pub pending_autostops: Vec<PendingAutostopCommand>,
     pub last_placed_order_id: Option<String>,
+    tick_aggregator: Option<TickAggregator>,
+    use_tick_aggregation: bool,
 }
 
 const HISTORY_FILE: &str = ".trade_history";
@@ -240,6 +243,8 @@ impl App {
             price_tracking: false,
             pending_autostops: Vec::new(),
             last_placed_order_id: None,
+            tick_aggregator: None,
+            use_tick_aggregation: false,
         }
     }
 
@@ -861,6 +866,9 @@ impl App {
                     self.trades.clear();
                     self.chart_offset = 0;
                     self.chart_offset_v = 0;
+                    if let Some(ref mut aggregator) = self.tick_aggregator {
+                        aggregator.clear();
+                    }
                     self.messages.push(format!("Symbol: {}", self.symbol));
                     self.subscribe_chart().await?;
                 }
@@ -909,17 +917,29 @@ impl App {
             Some("tf") => {
                 if parts.len() >= 2 {
                     let interval = parts[1];
-                    if ["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"].contains(&interval) {
+                    if ["1s", "5s", "10s", "30s"].contains(&interval) {
+                        if let Some(agg_interval) = AggregationInterval::from_interval_string(interval) {
+                            self.chart_interval = interval.to_string();
+                            self.chart_offset = 0;
+                            self.use_tick_aggregation = true;
+                            self.tick_aggregator = Some(TickAggregator::new(agg_interval));
+                            self.candles.clear();
+                            self.subscribe_chart().await?;
+                            self.messages.push(format!("Timeframe: {} (tick aggregation)", interval));
+                        }
+                    } else if ["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"].contains(&interval) {
                         self.chart_interval = interval.to_string();
                         self.chart_offset = 0;
+                        self.use_tick_aggregation = false;
+                        self.tick_aggregator = None;
                         self.refresh_candles().await?;
                         self.subscribe_chart().await?;
                         self.messages.push(format!("Timeframe: {}", interval));
                     } else {
-                        self.messages.push("Valid: 1, 3, 5, 15, 30, 60, 120, 240, D, W".to_string());
+                        self.messages.push("Valid: 1s, 5s, 10s, 30s, 1, 3, 5, 15, 30, 60, 120, 240, D, W".to_string());
                     }
                 } else {
-                    self.messages.push(format!("Current tf: {}. Usage: tf <1|5|15|30|60|240>", self.chart_interval));
+                    self.messages.push(format!("Current tf: {}. Usage: tf <1s|5s|10s|30s|1|5|15|30|60|240>", self.chart_interval));
                 }
             }
             Some("level") => {
@@ -1498,7 +1518,8 @@ impl App {
         self.messages.push("  ts <trigger> <callback>        - Set trailing stop (% or abs)".to_string());
         self.messages.push("  as <secs> [trigger|ratio]      - Activity stop (auto-close after N sec)".to_string());
         self.messages.push("  chart                          - Open chart view".to_string());
-        self.messages.push("  tf <1|5|15|30|60|240|D|W>      - Set timeframe".to_string());
+        self.messages.push("  tf <1s|5s|10s|30s|1|5|15|30|60|240|D|W> - Set timeframe".to_string());
+        self.messages.push("    Sub-second: 1s, 5s, 10s, 30s (tick aggregation)".to_string());
         self.messages.push("  level <price>                  - Add price level".to_string());
         self.messages.push("  clevel [price]                 - Clear level(s)".to_string());
         self.messages.push("  sound                          - Toggle trade sounds".to_string());
@@ -1720,9 +1741,33 @@ impl App {
                 ServerPayload::TradeUpdate(trade) => {
                     let is_buy = trade.side == Side::Buy;
                     self.last_price = Some(trade.price);
-                    self.trades.push_front(trade);
+                    self.trades.push_front(trade.clone());
                     if self.trades.len() > 100 {
                         self.trades.pop_back();
+                    }
+
+                    if self.use_tick_aggregation {
+                        if let Some(ref mut aggregator) = self.tick_aggregator {
+                            if let Some(completed_candle) = aggregator.add_trade(&trade) {
+                                if let Some(last) = self.candles.last_mut() {
+                                    if last.timestamp == completed_candle.timestamp {
+                                        *last = completed_candle;
+                                    } else {
+                                        self.candles.push(completed_candle);
+                                        if self.candles.len() > 500 {
+                                            self.candles.remove(0);
+                                        }
+                                    }
+                                } else {
+                                    self.candles.push(completed_candle);
+                                }
+                            }
+
+                            let all_candles = aggregator.get_candles();
+                            if !all_candles.is_empty() {
+                                self.candles = all_candles;
+                            }
+                        }
                     }
 
                     if self.sound_enabled && self.tab == Tab::Chart {
