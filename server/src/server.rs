@@ -310,6 +310,55 @@ async fn handle_connection(
                 WsEvent::PositionUpdate(data) => {
                     match serde_json::from_value::<Vec<trade_shared::Position>>(data.clone()) {
                         Ok(positions) => {
+                            for position in &positions {
+                                if position.quantity == rust_decimal::Decimal::ZERO {
+                                    let symbol = &position.symbol;
+                                    tracing::info!(
+                                        symbol = %symbol,
+                                        side = ?position.side,
+                                        "Position closed, canceling all limit orders for this symbol"
+                                    );
+
+                                    let bybit_clone = bybit_for_ws.clone();
+                                    let symbol_clone = symbol.clone();
+                                    tokio::spawn(async move {
+                                        match bybit_clone.get_orders(Some(&symbol_clone)).await {
+                                            Ok(orders) => {
+                                                let limit_orders: Vec<_> = orders.iter()
+                                                    .filter(|o| o.order_type == OrderType::Limit)
+                                                    .collect();
+
+                                                if !limit_orders.is_empty() {
+                                                    tracing::info!(
+                                                        symbol = %symbol_clone,
+                                                        count = limit_orders.len(),
+                                                        "Canceling limit orders"
+                                                    );
+
+                                                    for order in limit_orders {
+                                                        if let Err(e) = bybit_clone.cancel_order(&symbol_clone, &order.id).await {
+                                                            tracing::warn!(
+                                                                symbol = %symbol_clone,
+                                                                order_id = %order.id,
+                                                                error = %e,
+                                                                "Failed to cancel limit order"
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::error!(
+                                                    symbol = %symbol_clone,
+                                                    error = %e,
+                                                    "Failed to get orders for limit cancellation"
+                                                );
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+
                             let mut state_guard = activity_stop_for_ws.lock().await;
                             if let Some(ref state) = *state_guard {
                                 let matching_position = positions.iter().find(|p| {
