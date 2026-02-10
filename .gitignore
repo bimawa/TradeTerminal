@@ -1,4 +1,6 @@
 /target
+/dist
+/certs
 .env
 *.log
 .DS_Store

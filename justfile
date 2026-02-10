@@ -46,3 +46,34 @@ lint:
 # Clean build artifacts
 clean:
     cargo clean
+
+# Build server for Linux amd64
+build-linux-server-amd64:
+    @mkdir -p dist
+    docker build --platform linux/amd64 -t trade-server-build-amd64 -f server/Dockerfile .
+    @docker rm -f tmp-extract 2>/dev/null || true
+    docker create --name tmp-extract trade-server-build-amd64
+    docker cp tmp-extract:/usr/local/bin/trade-server ./dist/trade-server-linux-amd64
+    docker rm tmp-extract
+    @ls -lh dist/trade-server-linux-amd64
+
+# Build server for Linux arm64
+build-linux-server-arm64:
+    @mkdir -p dist
+    docker build --platform linux/arm64 -t trade-server-build-arm64 -f server/Dockerfile .
+    @docker rm -f tmp-extract 2>/dev/null || true
+    docker create --name tmp-extract trade-server-build-arm64
+    docker cp tmp-extract:/usr/local/bin/trade-server ./dist/trade-server-linux-arm64
+    docker rm tmp-extract
+    @ls -lh dist/trade-server-linux-arm64
+
+# Build server for both architectures
+build-linux-server: build-linux-server-amd64 build-linux-server-arm64
+
+# Deploy server to VPS via scp (requires VPS_HOST, VPS_USER in .env)
+deploy-server arch="amd64":
+    just build-linux-server-{{arch}}
+    ssh $VPS_USER@$VPS_HOST "mkdir -p ${VPS_PATH:-/opt/trade-terminal}"
+    scp dist/trade-server-linux-{{arch}} $VPS_USER@$VPS_HOST:${VPS_PATH:-/opt/trade-terminal}/trade-server-linux-{{arch}}
+    ssh $VPS_USER@$VPS_HOST "chmod +x ${VPS_PATH:-/opt/trade-terminal}/trade-server-linux-{{arch}}"
+    @echo "Deployed to $VPS_HOST:${VPS_PATH:-/opt/trade-terminal}/trade-server-linux-{{arch}}"

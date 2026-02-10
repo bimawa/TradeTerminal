@@ -1,4 +1,4 @@
-FROM rust:1.83-slim as builder
+FROM rust:latest AS builder
 
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 COPY Cargo.toml Cargo.lock* ./
 COPY shared ./shared
 COPY server ./server
+COPY client ./client
 
 RUN cargo build --release --package trade-server
 
