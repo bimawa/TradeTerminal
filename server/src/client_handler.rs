@@ -5,31 +5,31 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
 use trade_shared::{ClientMessage, ClientPayload, PersistedActivityStopState, ServerMessage, ServerPayload};
 
-use crate::bybit::BybitClient;
+use crate::exchange::ExchangeClientWrapper;
 use crate::db;
 use crate::server::ActivityStopState;
 
 pub struct ClientHandler {
-    bybit: Arc<BybitClient>,
+    exchange: Arc<ExchangeClientWrapper>,
     activity_stop_state: Arc<Mutex<Option<ActivityStopState>>>,
     db: Arc<redb::Database>,
 }
 
 impl ClientHandler {
-    pub fn new(bybit: Arc<BybitClient>, activity_stop_state: Arc<Mutex<Option<ActivityStopState>>>, db: Arc<redb::Database>) -> Self {
-        Self { bybit, activity_stop_state, db }
+    pub fn new(exchange: Arc<ExchangeClientWrapper>, activity_stop_state: Arc<Mutex<Option<ActivityStopState>>>, db: Arc<redb::Database>) -> Self {
+        Self { exchange, activity_stop_state, db }
     }
 
     pub async fn handle(&self, msg: ClientMessage, tx: &mpsc::Sender<ServerMessage>) -> Result<()> {
         let response = match msg.payload {
             ClientPayload::PlaceOrder(req) => {
-                match self.bybit.place_order(&req).await {
+                match self.exchange.place_order(&req).await {
                     Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
                     Err(e) => {
                         let err_str = e.to_string();
                         if err_str.contains("10001") && err_str.contains("position idx not match position mode") {
                             tracing::warn!("Position mode mismatch detected, attempting to switch to Hedge mode...");
-                            match self.bybit.switch_to_hedge_mode().await {
+                            match self.exchange.switch_to_hedge_mode().await {
                                 Ok(_) => {
                                     let notification = ServerMessage::new(ServerPayload::PositionModeChanged {
                                         from_mode: "One-Way".to_string(),
@@ -37,7 +37,7 @@ impl ClientHandler {
                                     });
                                     let _ = tx.send(notification).await;
 
-                                    match self.bybit.place_order(&req).await {
+                                    match self.exchange.place_order(&req).await {
                                         Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
                                         Err(retry_err) => {
                                             tracing::error!("Failed to place order after mode switch: {:#}", retry_err);
@@ -51,7 +51,7 @@ impl ClientHandler {
                                     let switch_err_str = switch_err.to_string();
                                     if switch_err_str.contains("110025") {
                                         tracing::info!("Already in hedge mode, retrying order...");
-                                        match self.bybit.place_order(&req).await {
+                                        match self.exchange.place_order(&req).await {
                                             Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
                                             Err(retry_err) => {
                                                 tracing::error!("Failed to place order on retry: {:#}", retry_err);
@@ -79,7 +79,7 @@ impl ClientHandler {
             },
 
             ClientPayload::CancelOrder { order_id } => {
-                match self.bybit.cancel_order(&trade_shared::Symbol::new("BTCUSDT"), &order_id).await {
+                match self.exchange.cancel_order(&trade_shared::Symbol::new("BTCUSDT"), &order_id).await {
                     Ok(_) => ServerMessage::new(ServerPayload::OrderCancelled { order_id }),
                     Err(e) => {
                         tracing::error!("Failed to cancel order {}: {:#}", order_id, e);
@@ -93,7 +93,7 @@ impl ClientHandler {
 
             ClientPayload::CancelAllOrders { symbol } => {
                 let symbol_display = symbol.as_ref().map(|s| s.0.as_str()).unwrap_or("all symbols");
-                match self.bybit.cancel_all_orders(symbol.as_ref()).await {
+                match self.exchange.cancel_all_orders(symbol.as_ref()).await {
                     Ok(_) => ServerMessage::new(ServerPayload::OrderCancelled {
                         order_id: "all".to_string(),
                     }),
@@ -108,7 +108,7 @@ impl ClientHandler {
             }
 
             ClientPayload::SetTrailingStop(req) => {
-                match self.bybit.set_trailing_stop(&req.symbol, req.side, req.target, req.active_price).await {
+                match self.exchange.set_trailing_stop(&req.symbol, req.side, req.target, req.active_price).await {
                     Ok(_) => ServerMessage::new(ServerPayload::TrailingStopSet {
                         symbol: req.symbol,
                     }),
@@ -270,7 +270,7 @@ impl ClientHandler {
             }
 
             ClientPayload::ClosePosition(req) => {
-                match self.bybit.close_position(&req.symbol, req.side).await {
+                match self.exchange.close_position(&req.symbol, req.side).await {
                     Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
                     Err(e) => {
                         tracing::error!("Failed to close position for {} {:?}: {:#}", req.symbol, req.side, e);
@@ -281,7 +281,7 @@ impl ClientHandler {
                 }
             }
 
-            ClientPayload::GetPositions => match self.bybit.get_positions(None).await {
+            ClientPayload::GetPositions => match self.exchange.get_positions(None).await {
                 Ok(positions) => ServerMessage::new(ServerPayload::Positions(positions)),
                 Err(e) => {
                     tracing::error!("Failed to get positions: {:#}", e);
@@ -294,7 +294,7 @@ impl ClientHandler {
 
             ClientPayload::GetOrders { symbol } => {
                 let symbol_display = symbol.as_ref().map(|s| s.0.as_str()).unwrap_or("all symbols");
-                match self.bybit.get_orders(symbol.as_ref()).await {
+                match self.exchange.get_orders(symbol.as_ref()).await {
                     Ok(orders) => ServerMessage::new(ServerPayload::Orders(orders)),
                     Err(e) => {
                         tracing::error!("Failed to get orders for {}: {:#}", symbol_display, e);
@@ -307,7 +307,7 @@ impl ClientHandler {
             }
 
             ClientPayload::GetAccountInfo => {
-                let positions = self.bybit.get_positions(None).await.unwrap_or_default();
+                let positions = self.exchange.get_positions(None).await.unwrap_or_default();
                 ServerMessage::new(ServerPayload::AccountInfo(trade_shared::AccountInfo {
                     balances: vec![],
                     positions,
@@ -315,7 +315,7 @@ impl ClientHandler {
             }
 
             ClientPayload::GetTicker { symbol } => {
-                match self.bybit.get_ticker(&symbol).await {
+                match self.exchange.get_ticker(&symbol).await {
                     Ok(ticker) => ServerMessage::new(ServerPayload::TickerUpdate(ticker)),
                     Err(e) => {
                         tracing::error!("Failed to get ticker for {}: {:#}", symbol, e);
@@ -328,7 +328,7 @@ impl ClientHandler {
             }
 
             ClientPayload::GetCandles { symbol, interval, limit } => {
-                match self.bybit.get_klines(&symbol, &interval, limit).await {
+                match self.exchange.get_klines(&symbol, &interval, limit).await {
                     Ok(candles) => ServerMessage::new(ServerPayload::Candles(candles)),
                     Err(e) => {
                         tracing::error!("Failed to get candles for {} (interval={}, limit={}): {:#}", symbol, interval, limit, e);

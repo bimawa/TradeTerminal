@@ -1,8 +1,10 @@
 mod auth;
+mod binance;
 mod bybit;
 mod client_handler;
 mod config;
 mod db;
+mod exchange;
 mod server;
 pub mod tls;
 
@@ -21,7 +23,11 @@ async fn main() -> Result<()> {
 
     let config = config::Config::from_env()?;
     let database = Arc::new(db::init_database()?);
-    tracing::info!("Starting trade server on {}", config.listen_addr);
+    tracing::info!(
+        "Starting trade server on {} with exchange: {:?}",
+        config.listen_addr,
+        config.exchange
+    );
 
     server::run(config, database).await
 }

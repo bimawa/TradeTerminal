@@ -19,17 +19,17 @@ pub struct ActivityStopState {
     pub last_trade_time: Instant,
 }
 
-use crate::bybit::{BybitClient, BybitWebSocket, WsEvent};
 use crate::client_handler::ClientHandler;
 use crate::config::Config;
 use crate::db;
+use crate::exchange::{ExchangeClientWrapper, ExchangeWebSocketWrapper, WsEvent};
 
 pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
     let listener = TcpListener::bind(&config.listen_addr)
         .await
         .context(format!("Failed to bind to {}", config.listen_addr))?;
-    let bybit_client = Arc::new(BybitClient::new(&config));
-    let bybit_ws = Arc::new(BybitWebSocket::new(&config));
+    let exchange_client = Arc::new(ExchangeClientWrapper::new(&config));
+    let exchange_ws = Arc::new(ExchangeWebSocketWrapper::new(&config));
 
     let tls_acceptor = if config.tls_enabled {
         let tls_config = tls::load_tls_config(
@@ -47,8 +47,8 @@ pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
 
     while let Ok((stream, addr)) = listener.accept().await {
         tracing::info!("New connection from {}", addr);
-        let bybit = bybit_client.clone();
-        let ws = bybit_ws.clone();
+        let exchange = exchange_client.clone();
+        let ws = exchange_ws.clone();
         let db_clone = db.clone();
         let acceptor = tls_acceptor.clone();
         let auth = auth_key.clone();
@@ -56,14 +56,14 @@ pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
         tokio::spawn(async move {
             let result = if let Some(tls_acceptor) = acceptor {
                 match tls_acceptor.accept(stream).await {
-                    Ok(tls_stream) => handle_connection(tls_stream, bybit, ws, db_clone, auth).await,
+                    Ok(tls_stream) => handle_connection(tls_stream, exchange, ws, db_clone, auth).await,
                     Err(e) => {
                         tracing::error!(addr = %addr, error = %e, "TLS handshake failed");
                         return;
                     }
                 }
             } else {
-                handle_connection(stream, bybit, ws, db_clone, auth).await
+                handle_connection(stream, exchange, ws, db_clone, auth).await
             };
 
             if let Err(e) = result {
@@ -77,8 +77,8 @@ pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
 
 async fn handle_connection(
     stream: impl AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    bybit: Arc<BybitClient>,
-    bybit_ws: Arc<BybitWebSocket>,
+    exchange: Arc<ExchangeClientWrapper>,
+    exchange_ws: Arc<ExchangeWebSocketWrapper>,
     db: Arc<redb::Database>,
     auth_key: Option<String>,
 ) -> Result<()> {
@@ -119,7 +119,7 @@ async fn handle_connection(
     }
 
     let (tx, mut rx) = mpsc::channel::<ServerMessage>(100);
-    let bybit_for_timer = bybit.clone();
+    let exchange_for_timer = exchange.clone();
 
     let initial_state = match db::load_all_activity_stops(&db) {
         Ok(states) => {
@@ -165,7 +165,7 @@ async fn handle_connection(
     };
 
     let activity_stop_state: Arc<Mutex<Option<ActivityStopState>>> = Arc::new(Mutex::new(initial_state));
-    let handler = ClientHandler::new(bybit, activity_stop_state.clone(), db.clone());
+    let handler = ClientHandler::new(exchange.clone(), activity_stop_state.clone(), db.clone());
 
     let connected_msg = ServerMessage::new(ServerPayload::Connected);
     let connected_json = serde_json::to_string(&connected_msg)
@@ -176,7 +176,7 @@ async fn handle_connection(
         .context("Failed to send Connected message")?;
 
     let (ws_event_tx, mut ws_event_rx) = mpsc::channel(100);
-    let ws_clone = bybit_ws.clone();
+    let ws_clone = exchange_ws.clone();
     tokio::spawn(async move {
         if let Err(e) = ws_clone.connect_private(ws_event_tx).await {
             tracing::error!(error = %e, "Bybit private WebSocket connection failed");
@@ -186,7 +186,7 @@ async fn handle_connection(
     let tx_clone = tx.clone();
     let activity_stop_for_ws = activity_stop_state.clone();
     let db_for_ws = db.clone();
-    let bybit_for_ws = bybit_for_timer.clone();
+    let exchange_for_ws = exchange_for_timer.clone();
     let ws_event_task = tokio::spawn(async move {
         while let Some(event) = ws_event_rx.recv().await {
             let msg = match event {
@@ -209,7 +209,7 @@ async fn handle_connection(
                                                     pending.autostop_params.trailing_stop_target,
                                                     pending.autostop_params.active_price,
                                                 ) {
-                                                    if let Err(e) = bybit_for_ws.set_trailing_stop(
+                                                    if let Err(e) = exchange_for_ws.set_trailing_stop(
                                                         &pending.symbol,
                                                         pending.side,
                                                         target,
@@ -319,10 +319,10 @@ async fn handle_connection(
                                         "Position closed, canceling all limit orders for this symbol"
                                     );
 
-                                    let bybit_clone = bybit_for_ws.clone();
+                                    let exchange_clone = exchange_for_ws.clone();
                                     let symbol_clone = symbol.clone();
                                     tokio::spawn(async move {
-                                        match bybit_clone.get_orders(Some(&symbol_clone)).await {
+                                        match exchange_clone.get_orders(Some(&symbol_clone)).await {
                                             Ok(orders) => {
                                                 let limit_orders: Vec<_> = orders.iter()
                                                     .filter(|o| o.order_type == OrderType::Limit)
@@ -336,7 +336,7 @@ async fn handle_connection(
                                                     );
 
                                                     for order in limit_orders {
-                                                        if let Err(e) = bybit_clone.cancel_order(&symbol_clone, &order.id).await {
+                                                        if let Err(e) = exchange_clone.cancel_order(&symbol_clone, &order.id).await {
                                                             tracing::warn!(
                                                                 symbol = %symbol_clone,
                                                                 order_id = %order.id,
@@ -503,7 +503,7 @@ async fn handle_connection(
                                         handle.abort();
                                     }
                                     *chart_symbol.lock().await = Some(symbol.clone());
-                                    let ws = bybit_ws.clone();
+                                    let ws = exchange_ws.clone();
                                     let sym = symbol.0.clone();
                                     let int = interval.clone();
                                     let evt_tx = chart_event_tx.clone();
@@ -563,7 +563,7 @@ async fn handle_connection(
 
 
 
-                            match bybit_for_timer.get_positions(Some(&state.persisted.symbol)).await {
+                            match exchange_for_timer.get_positions(Some(&state.persisted.symbol)).await {
                                 Ok(positions) => {
                                     tracing::debug!(symbol = %state.persisted.symbol, side = ?state.persisted.side, positions_count = positions.len(), "Fetched positions for panic stop");
                                     for pos in &positions {
@@ -592,7 +592,7 @@ async fn handle_connection(
                                             position_idx: Some(position_idx),
                                         };
 
-                                        match bybit_for_timer.place_order(&order_req).await {
+                                        match exchange_for_timer.place_order(&order_req).await {
                                             Ok(_) => {
                                                 tracing::info!(symbol = %state.persisted.symbol, side = ?state.persisted.side, qty = %position.quantity, "Panic stop market close executed");
                                                 let symbol_clone = state.persisted.symbol.clone();
