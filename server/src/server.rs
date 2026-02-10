@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
 use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use trade_shared::{AuthMessage, ClientMessage, ClientPayload, OrderRequest, OrderType, PersistedActivityStopState, ServerMessage, ServerPayload, Side, Symbol, TimeInForce, Trade};
+use trade_shared::{AuthMessage, ClientMessage, ClientPayload, OrderRequest, OrderType, PersistedActivityStopState, ServerMessage, ServerPayload, Side, Symbol, Ticker, TimeInForce, Trade};
 
 use crate::{auth, tls};
 
@@ -429,6 +429,11 @@ async fn handle_connection(
                                 }
                             }
                         }
+                    } else if let Some(trade) = parse_trade(&data) {
+                        last_trade_price = Some(trade.price);
+                        if chart_tx.send(ServerMessage::new(ServerPayload::TradeUpdate(trade))).await.is_err() {
+                            return;
+                        }
                     }
                     if let Some(trade_price) = last_trade_price {
                         let subscribed_symbol = chart_symbol_for_handler.lock().await.clone();
@@ -462,8 +467,11 @@ async fn handle_connection(
                             None
                         }
                     } else {
-                        None
+                        parse_candle(&data).map(|candle| ServerMessage::new(ServerPayload::CandleUpdate(candle)))
                     }
+                }
+                WsEvent::TickerUpdate(data) => {
+                    parse_ticker(&data).map(|ticker| ServerMessage::new(ServerPayload::TickerUpdate(ticker)))
                 }
                 _ => None,
             };
@@ -683,34 +691,82 @@ async fn handle_connection(
 }
 
 fn parse_trade(data: &serde_json::Value) -> Option<Trade> {
-    let timestamp = data.get("T")?.as_i64()?;
-    let price = Decimal::from_str(data.get("p")?.as_str()?).ok()?;
-    let qty = Decimal::from_str(data.get("v")?.as_str()?).ok()?;
-    let side_str = data.get("S")?.as_str()?;
-    let side = if side_str == "Buy" { Side::Buy } else { Side::Sell };
-    
-    Some(Trade {
-        timestamp,
-        price,
-        qty,
-        side,
-    })
+    if let Some(side_str) = data.get("S").and_then(|s| s.as_str()) {
+        let timestamp = data.get("T")?.as_i64()?;
+        let price = Decimal::from_str(data.get("p")?.as_str()?).ok()?;
+        let qty = Decimal::from_str(data.get("v")?.as_str()?).ok()?;
+        let side = if side_str == "Buy" { Side::Buy } else { Side::Sell };
+        return Some(Trade { timestamp, price, qty, side });
+    }
+
+    if let Some(is_maker) = data.get("m").and_then(|m| m.as_bool()) {
+        let timestamp = data.get("T")?.as_i64()?;
+        let price = Decimal::from_str(data.get("p")?.as_str()?).ok()?;
+        let qty = Decimal::from_str(data.get("q")?.as_str()?).ok()?;
+        let side = if is_maker { Side::Sell } else { Side::Buy };
+        return Some(Trade { timestamp, price, qty, side });
+    }
+
+    None
 }
 
 fn parse_candle(data: &serde_json::Value) -> Option<trade_shared::Candle> {
-    let start = data.get("start")?.as_i64()?;
-    let open = Decimal::from_str(data.get("open")?.as_str()?).ok()?;
-    let high = Decimal::from_str(data.get("high")?.as_str()?).ok()?;
-    let low = Decimal::from_str(data.get("low")?.as_str()?).ok()?;
-    let close = Decimal::from_str(data.get("close")?.as_str()?).ok()?;
-    let volume = Decimal::from_str(data.get("volume")?.as_str()?).ok()?;
-    
-    Some(trade_shared::Candle {
-        timestamp: start,
-        open,
-        high,
-        low,
-        close,
-        volume,
-    })
+    if let Some(start) = data.get("start").and_then(|s| s.as_i64()) {
+        let open = Decimal::from_str(data.get("open")?.as_str()?).ok()?;
+        let high = Decimal::from_str(data.get("high")?.as_str()?).ok()?;
+        let low = Decimal::from_str(data.get("low")?.as_str()?).ok()?;
+        let close = Decimal::from_str(data.get("close")?.as_str()?).ok()?;
+        let volume = Decimal::from_str(data.get("volume")?.as_str()?).ok()?;
+        return Some(trade_shared::Candle { timestamp: start, open, high, low, close, volume });
+    }
+
+    if let Some(k) = data.get("k") {
+        let timestamp = k.get("t")?.as_i64()?;
+        let open = Decimal::from_str(k.get("o")?.as_str()?).ok()?;
+        let high = Decimal::from_str(k.get("h")?.as_str()?).ok()?;
+        let low = Decimal::from_str(k.get("l")?.as_str()?).ok()?;
+        let close = Decimal::from_str(k.get("c")?.as_str()?).ok()?;
+        let volume = Decimal::from_str(k.get("v")?.as_str()?).ok()?;
+        return Some(trade_shared::Candle { timestamp, open, high, low, close, volume });
+    }
+
+    None
+}
+
+fn parse_ticker(data: &serde_json::Value) -> Option<Ticker> {
+    if let Some(symbol_str) = data.get("s").and_then(|s| s.as_str()) {
+        let last_price = Decimal::from_str(data.get("c")?.as_str()?).ok()?;
+        let bid_price = Decimal::from_str(data.get("b")?.as_str()?).ok()?;
+        let ask_price = Decimal::from_str(data.get("a")?.as_str()?).ok()?;
+        let volume_24h = Decimal::from_str(data.get("v")?.as_str()?).ok()?;
+        let price_change_24h = Decimal::from_str(data.get("P")?.as_str()?).ok()?;
+        return Some(Ticker {
+            symbol: Symbol(symbol_str.to_string()),
+            last_price,
+            bid_price,
+            ask_price,
+            volume_24h,
+            price_change_24h,
+        });
+    }
+
+    if let Some(data_inner) = data.get("data") {
+        let symbol_str = data_inner.get("symbol").and_then(|s| s.as_str())?;
+        let last_price = Decimal::from_str(data_inner.get("lastPrice").and_then(|s| s.as_str())?).ok()?;
+        let bid_price = Decimal::from_str(data_inner.get("bid1Price").and_then(|s| s.as_str())?).ok()?;
+        let ask_price = Decimal::from_str(data_inner.get("ask1Price").and_then(|s| s.as_str())?).ok()?;
+        let volume_24h = Decimal::from_str(data_inner.get("volume24h").and_then(|s| s.as_str())?).ok()?;
+        let price_change_24h = Decimal::from_str(data_inner.get("price24hPcnt").and_then(|s| s.as_str())?).ok()?;
+        let price_change_pct = price_change_24h * Decimal::from(100);
+        return Some(Ticker {
+            symbol: Symbol(symbol_str.to_string()),
+            last_price,
+            bid_price,
+            ask_price,
+            volume_24h,
+            price_change_24h: price_change_pct,
+        });
+    }
+
+    None
 }

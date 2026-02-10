@@ -272,27 +272,42 @@ impl BinanceWebSocket {
         interval: &str,
         tx: &mpsc::Sender<WsEvent>,
     ) -> Result<()> {
-        let channel = format!("{}@kline_{}", symbol.to_lowercase(), interval);
+        let binance_interval = super::client::convert_interval_to_binance(interval);
+        let sym_lower = symbol.to_lowercase();
+        let channels = vec![
+            format!("{}@kline_{}", sym_lower, binance_interval),
+            format!("{}@aggTrade", sym_lower),
+            format!("{}@ticker", sym_lower),
+        ];
         let (ws_stream, _) = connect_async(&self.public_url).await?;
         let (mut write, mut read) = ws_stream.split();
 
         let subscribe = SubscribeMessage {
             method: "SUBSCRIBE".to_string(),
-            params: vec![channel.clone()],
+            params: channels.clone(),
             id: Self::timestamp(),
         };
 
         write.send(Message::Text(serde_json::to_string(&subscribe)?)).await?;
 
         let _ = tx.send(WsEvent::Connected).await;
-        tracing::info!("Binance chart WebSocket connected: {}", channel);
+        tracing::info!("Binance chart WebSocket connected: {:?}", channels);
 
         while let Some(msg) = read.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
                     if let Ok(ws_msg) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if ws_msg.get("e").and_then(|e| e.as_str()) == Some("kline") {
-                            let _ = tx.send(WsEvent::KlineUpdate(ws_msg)).await;
+                        match ws_msg.get("e").and_then(|e| e.as_str()) {
+                            Some("kline") => {
+                                let _ = tx.send(WsEvent::KlineUpdate(ws_msg)).await;
+                            }
+                            Some("aggTrade") => {
+                                let _ = tx.send(WsEvent::TradeUpdate(ws_msg)).await;
+                            }
+                            Some("24hrTicker") => {
+                                let _ = tx.send(WsEvent::TickerUpdate(ws_msg)).await;
+                            }
+                            _ => {}
                         }
                     }
                 }

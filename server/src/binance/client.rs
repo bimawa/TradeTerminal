@@ -358,9 +358,10 @@ impl BinanceClient {
     }
 
     pub async fn get_klines(&self, symbol: &Symbol, interval: &str, limit: u32) -> Result<Vec<Candle>> {
+        let binance_interval = convert_interval_to_binance(interval);
         let url = format!(
             "{}/fapi/v1/klines?symbol={}&interval={}&limit={}",
-            self.base_url, symbol.0, interval, limit
+            self.base_url, symbol.0, binance_interval, limit
         );
         tracing::debug!("GET (public) {}", url);
 
@@ -517,6 +518,25 @@ fn convert_ticker(t: BinanceTicker, symbol: &Symbol) -> Ticker {
         ask_price: t.ask_price.parse().unwrap_or_default(),
         volume_24h: t.volume.parse().unwrap_or_default(),
         price_change_24h: t.price_change_percent.parse().unwrap_or_default(),
+    }
+}
+
+pub fn convert_interval_to_binance(interval: &str) -> String {
+    match interval {
+        "1" => "1m".to_string(),
+        "3" => "3m".to_string(),
+        "5" => "5m".to_string(),
+        "15" => "15m".to_string(),
+        "30" => "30m".to_string(),
+        "60" => "1h".to_string(),
+        "120" => "2h".to_string(),
+        "240" => "4h".to_string(),
+        "360" => "6h".to_string(),
+        "720" => "12h".to_string(),
+        "D" => "1d".to_string(),
+        "W" => "1w".to_string(),
+        "M" => "1M".to_string(),
+        other => other.to_string(),
     }
 }
 
