@@ -179,7 +179,7 @@ async fn handle_connection(
     let ws_clone = exchange_ws.clone();
     tokio::spawn(async move {
         if let Err(e) = ws_clone.connect_private(ws_event_tx).await {
-            tracing::error!(error = %e, "Bybit private WebSocket connection failed");
+            tracing::error!(error = %e, "Exchange private WebSocket connection failed");
         }
     });
 
@@ -479,12 +479,19 @@ async fn handle_connection(
 
     let write_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            if let Ok(text) = serde_json::to_string(&msg) {
-                if write.send(Message::Text(text)).await.is_err() {
-                    break;
+            match serde_json::to_string(&msg) {
+                Ok(text) => {
+                    if let Err(e) = write.send(Message::Text(text)).await {
+                        tracing::error!(error = %e, "Failed to send message to WebSocket client");
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to serialize message");
                 }
             }
         }
+        tracing::info!("Write task terminated");
     });
 
     let mut timer_interval = tokio::time::interval(Duration::from_millis(100));

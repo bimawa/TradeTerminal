@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Exchange {

@@ -5,7 +5,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-use super::sign::sign;
 use crate::config::Config;
 
 #[derive(Debug, Clone)]
