@@ -20,5 +20,4 @@ pub trait ExchangeClient: Send + Sync {
         target: TrailingStopTarget,
         active_price: Option<Decimal>,
     ) -> Result<()>;
-    async fn switch_to_hedge_mode(&self) -> Result<()>;
 }

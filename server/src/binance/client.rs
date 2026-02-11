@@ -2,11 +2,20 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 use trade_shared::{Candle, Order, OrderRequest, OrderStatus, OrderType, Position, Side, Symbol, Ticker, TrailingStopTarget};
 
 use super::sign::generate_signature;
 use crate::config::Config;
+
+#[derive(Debug, Clone)]
+struct SymbolInfo {
+    tick_size: Decimal,
+    step_size: Decimal,
+}
 
 #[derive(Clone)]
 pub struct BinanceClient {
@@ -14,6 +23,7 @@ pub struct BinanceClient {
     api_key: String,
     api_secret: String,
     base_url: String,
+    symbol_info: Arc<RwLock<HashMap<String, SymbolInfo>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,37 +79,18 @@ struct BinancePosition {
 
 #[derive(Debug, Deserialize)]
 struct BinanceTicker {
-    symbol: String,
     #[serde(rename = "lastPrice")]
     last_price: String,
-    #[serde(rename = "bidPrice")]
-    bid_price: String,
-    #[serde(rename = "askPrice")]
-    ask_price: String,
+    #[serde(rename = "bidPrice", default)]
+    bid_price: Option<String>,
+    #[serde(rename = "askPrice", default)]
+    ask_price: Option<String>,
     volume: String,
     #[serde(rename = "priceChangePercent")]
     price_change_percent: String,
 }
 
-#[derive(Debug, Serialize)]
-struct PlaceOrderRequest {
-    symbol: String,
-    side: String,
-    #[serde(rename = "type")]
-    order_type: String,
-    quantity: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    price: Option<String>,
-    #[serde(rename = "timeInForce", skip_serializing_if = "Option::is_none")]
-    time_in_force: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "positionSide")]
-    position_side: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "reduceOnly")]
-    reduce_only: Option<String>,
-    timestamp: u64,
-}
+
 
 impl BinanceClient {
     pub fn new(config: &Config) -> Self {
@@ -108,7 +99,53 @@ impl BinanceClient {
             api_key: config.binance_api_key.clone(),
             api_secret: config.binance_api_secret.clone(),
             base_url: config.rest_url().to_string(),
+            symbol_info: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    async fn load_symbol_info(&self, symbol: &str) -> Result<SymbolInfo> {
+        {
+            let cache = self.symbol_info.read().await;
+            if let Some(info) = cache.get(symbol) {
+                return Ok(info.clone());
+            }
+        }
+
+        let url = format!("{}/fapi/v1/exchangeInfo", self.base_url);
+        let response = self.client.get(&url).send().await.context("Failed to fetch exchangeInfo")?;
+        let resp_text = response.text().await.context("Failed to read exchangeInfo")?;
+        let data: serde_json::Value = serde_json::from_str(&resp_text).context("Failed to parse exchangeInfo")?;
+
+        let mut cache = self.symbol_info.write().await;
+        if let Some(symbols) = data.get("symbols").and_then(|s| s.as_array()) {
+            for s in symbols {
+                let sym = s.get("symbol").and_then(|v| v.as_str()).unwrap_or("");
+                let filters = s.get("filters").and_then(|f| f.as_array());
+                let mut tick_size = Decimal::new(1, 8);
+                let mut step_size = Decimal::new(1, 8);
+                if let Some(filters) = filters {
+                    for f in filters {
+                        let ft = f.get("filterType").and_then(|v| v.as_str()).unwrap_or("");
+                        if ft == "PRICE_FILTER" {
+                            if let Some(ts) = f.get("tickSize").and_then(|v| v.as_str()) {
+                                tick_size = ts.parse().unwrap_or(tick_size);
+                            }
+                        } else if ft == "LOT_SIZE" {
+                            if let Some(ss) = f.get("stepSize").and_then(|v| v.as_str()) {
+                                step_size = ss.parse().unwrap_or(step_size);
+                            }
+                        }
+                    }
+                }
+                cache.insert(sym.to_string(), SymbolInfo { tick_size, step_size });
+            }
+        }
+
+        cache.get(symbol).cloned().context(format!("Symbol {} not found in exchangeInfo", symbol))
+    }
+
+    fn round_to_step(value: Decimal, step: Decimal) -> Decimal {
+        (value / step).floor() * step
     }
 
     fn timestamp() -> u64 {
@@ -175,10 +212,7 @@ impl BinanceClient {
     }
 
     pub async fn place_order(&self, req: &OrderRequest) -> Result<Order> {
-        let position_side = match req.side {
-            Side::Buy => "LONG",
-            Side::Sell => "SHORT",
-        };
+        let info = self.load_symbol_info(&req.symbol.0).await?;
 
         let order_type = match req.order_type {
             OrderType::Market => "MARKET",
@@ -196,6 +230,9 @@ impl BinanceClient {
             None
         };
 
+        let quantity = Self::round_to_step(req.quantity, info.step_size);
+        let price = req.price.map(|p| Self::round_to_step(p, info.tick_size));
+
         #[derive(Serialize)]
         struct OrderParams {
             symbol: String,
@@ -207,8 +244,6 @@ impl BinanceClient {
             price: Option<String>,
             #[serde(rename = "timeInForce", skip_serializing_if = "Option::is_none")]
             time_in_force: Option<String>,
-            #[serde(rename = "positionSide")]
-            position_side: String,
             #[serde(rename = "reduceOnly", skip_serializing_if = "Option::is_none")]
             reduce_only: Option<String>,
         }
@@ -220,14 +255,32 @@ impl BinanceClient {
                 Side::Sell => "SELL".to_string(),
             },
             order_type: order_type.to_string(),
-            quantity: req.quantity.to_string(),
-            price: req.price.map(|p| p.to_string()),
+            quantity: quantity.to_string(),
+            price: price.map(|p| p.to_string()),
             time_in_force,
-            position_side: position_side.to_string(),
             reduce_only: if req.reduce_only { Some("true".to_string()) } else { None },
         };
 
         let result: OrderResult = self.signed_request("POST", "/fapi/v1/order", &params).await?;
+
+        if req.stop_loss.is_some() || req.take_profit.is_some() {
+            let close_side = match req.side {
+                Side::Buy => "SELL",
+                Side::Sell => "BUY",
+            };
+            if let Some(sl) = req.stop_loss {
+                let sl_price = Self::round_to_step(sl, info.tick_size);
+                if let Err(e) = self.place_algo_stop(&req.symbol.0, close_side, "STOP_MARKET", sl_price, quantity, &info).await {
+                    tracing::error!("Failed to place stop loss for {}: {}", req.symbol, e);
+                }
+            }
+            if let Some(tp) = req.take_profit {
+                let tp_price = Self::round_to_step(tp, info.tick_size);
+                if let Err(e) = self.place_algo_stop(&req.symbol.0, close_side, "TAKE_PROFIT_MARKET", tp_price, quantity, &info).await {
+                    tracing::error!("Failed to place take profit for {}: {}", req.symbol, e);
+                }
+            }
+        }
 
         Ok(Order {
             id: result.order_id.to_string(),
@@ -241,6 +294,42 @@ impl BinanceClient {
             status: OrderStatus::New,
             created_at: chrono::Utc::now(),
         })
+    }
+
+    async fn place_algo_stop(
+        &self,
+        symbol: &str,
+        side: &str,
+        order_type: &str,
+        trigger_price: Decimal,
+        quantity: Decimal,
+        info: &SymbolInfo,
+    ) -> Result<()> {
+        #[derive(Serialize)]
+        struct AlgoStopParams {
+            #[serde(rename = "algoType")]
+            algo_type: String,
+            symbol: String,
+            side: String,
+            #[serde(rename = "type")]
+            order_type: String,
+            #[serde(rename = "triggerPrice")]
+            trigger_price: String,
+            quantity: String,
+        }
+
+        let params = AlgoStopParams {
+            algo_type: "CONDITIONAL".to_string(),
+            symbol: symbol.to_string(),
+            side: side.to_string(),
+            order_type: order_type.to_string(),
+            trigger_price: Self::round_to_step(trigger_price, info.tick_size).to_string(),
+            quantity: Self::round_to_step(quantity, info.step_size).to_string(),
+        };
+
+        let _: serde_json::Value = self.signed_request("POST", "/fapi/v1/algoOrder", &params).await?;
+        tracing::info!("Placed {} for {} at {}", order_type, symbol, trigger_price);
+        Ok(())
     }
 
     pub async fn cancel_order(&self, symbol: &Symbol, order_id: &str) -> Result<()> {
@@ -303,7 +392,7 @@ impl BinanceClient {
 
         tracing::debug!("Raw positions from Binance: {} items", positions.len());
 
-        let filtered: Vec<Position> = positions
+        let mut filtered: Vec<Position> = positions
             .into_iter()
             .filter(|p| {
                 let amt = p.position_amt.parse::<f64>().unwrap_or(0.0);
@@ -315,10 +404,51 @@ impl BinanceClient {
             .map(convert_position)
             .collect();
 
+        if !filtered.is_empty() {
+            if let Ok(algo_orders) = self.get_open_algo_orders(symbol).await {
+                for pos in &mut filtered {
+                    for ao in &algo_orders {
+                        let ao_symbol = ao.get("symbol").and_then(|v| v.as_str()).unwrap_or("");
+                        if ao_symbol != pos.symbol.0 {
+                            continue;
+                        }
+                        let order_type = ao.get("orderType").and_then(|v| v.as_str()).unwrap_or("");
+                        let trigger_price = ao.get("triggerPrice")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<Decimal>().ok())
+                            .filter(|d| !d.is_zero());
+                        let callback_rate = ao.get("callbackRate")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<Decimal>().ok())
+                            .filter(|d| !d.is_zero());
+                        match order_type {
+                            "STOP_MARKET" | "STOP" => pos.stop_loss = trigger_price,
+                            "TAKE_PROFIT_MARKET" | "TAKE_PROFIT" => pos.take_profit = trigger_price,
+                            "TRAILING_STOP_MARKET" => pos.trailing_stop = callback_rate,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(filtered)
     }
 
+    async fn get_open_algo_orders(&self, symbol: Option<&Symbol>) -> Result<Vec<serde_json::Value>> {
+        #[derive(Serialize)]
+        struct AlgoParams {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            symbol: Option<String>,
+        }
+        let params = AlgoParams {
+            symbol: symbol.map(|s| s.0.clone()),
+        };
+        self.signed_request("GET", "/fapi/v1/openAlgoOrders", &params).await
+    }
+
     pub async fn close_position(&self, symbol: &Symbol, side: Side) -> Result<Order> {
+        let info = self.load_symbol_info(&symbol.0).await?;
         let positions = self.get_positions(Some(symbol)).await?;
         let position = positions
             .into_iter()
@@ -334,7 +464,7 @@ impl BinanceClient {
             symbol: symbol.clone(),
             side: close_side,
             order_type: OrderType::Market,
-            quantity: position.quantity,
+            quantity: Self::round_to_step(position.quantity, info.step_size),
             price: None,
             time_in_force: trade_shared::TimeInForce::Gtc,
             reduce_only: true,
@@ -353,7 +483,8 @@ impl BinanceClient {
         let response = self.client.get(&url).send().await.context("Failed to send request")?;
         let resp_text = response.text().await.context("Failed to read response")?;
 
-        let ticker: BinanceTicker = serde_json::from_str(&resp_text).context("Failed to parse ticker")?;
+        let ticker: BinanceTicker = serde_json::from_str(&resp_text)
+            .context(format!("Failed to parse ticker: {}", resp_text))?;
         Ok(convert_ticker(ticker, symbol))
     }
 
@@ -417,10 +548,29 @@ impl BinanceClient {
         target: TrailingStopTarget,
         active_price: Option<Decimal>,
     ) -> Result<()> {
-        let trailing_stop = self.resolve_trailing_stop_target(symbol, side, target).await?;
+        let info = self.load_symbol_info(&symbol.0).await?;
+        let callback_rate = match target {
+            TrailingStopTarget::Percentage(pct) => pct,
+            TrailingStopTarget::Absolute(value) => {
+                let ticker = self.get_ticker(symbol).await?;
+                (value / ticker.last_price * Decimal::from(100)).round_dp(1)
+            }
+            TrailingStopTarget::Ratio { numerator, denominator } => {
+                let positions = self.get_positions(Some(symbol)).await?;
+                let position = positions.iter().find(|p| p.side == side)
+                    .context("Position not found for ratio calculation")?;
+                let stop_loss = position.stop_loss
+                    .context("Stop loss not set, cannot calculate ratio target")?;
+                let sl_pct = ((stop_loss - position.entry_price).abs() / position.entry_price * Decimal::from(100));
+                (sl_pct * Decimal::from(denominator) / Decimal::from(numerator)).round_dp(1)
+            }
+        };
+        let callback_rate = callback_rate.max(Decimal::new(1, 1)).min(Decimal::from(10));
 
         #[derive(Serialize)]
         struct TrailingStopParams {
+            #[serde(rename = "algoType")]
+            algo_type: String,
             symbol: String,
             side: String,
             #[serde(rename = "type")]
@@ -428,38 +578,64 @@ impl BinanceClient {
             #[serde(rename = "callbackRate")]
             callback_rate: String,
             #[serde(skip_serializing_if = "Option::is_none")]
-            #[serde(rename = "activationPrice")]
-            activation_price: Option<String>,
+            #[serde(rename = "activatePrice")]
+            activate_price: Option<String>,
+            quantity: String,
         }
 
+        let positions = self.get_positions(Some(symbol)).await?;
+        let position = positions
+            .iter()
+            .find(|p| p.side == side)
+            .context("Position not found for trailing stop")?;
+
         let params = TrailingStopParams {
+            algo_type: "CONDITIONAL".to_string(),
             symbol: symbol.0.clone(),
             side: match side {
                 Side::Buy => "SELL".to_string(),
                 Side::Sell => "BUY".to_string(),
             },
             order_type: "TRAILING_STOP_MARKET".to_string(),
-            callback_rate: trailing_stop.to_string(),
-            activation_price: active_price.map(|p| p.to_string()),
+            callback_rate: callback_rate.to_string(),
+            activate_price: active_price.map(|p| Self::round_to_step(p, info.tick_size).to_string()),
+            quantity: Self::round_to_step(position.quantity, info.step_size).to_string(),
         };
 
-        let _: serde_json::Value = self.signed_request("POST", "/fapi/v1/order", &params).await?;
+        let _: serde_json::Value = self.signed_request("POST", "/fapi/v1/algoOrder", &params).await?;
         Ok(())
     }
 
-    pub async fn switch_to_hedge_mode(&self) -> Result<()> {
+    pub async fn ensure_one_way_mode(&self) -> Result<()> {
         #[derive(Serialize)]
-        struct HedgeModeParams {
+        struct Empty {}
+
+        let status: serde_json::Value = self.signed_request("GET", "/fapi/v1/positionSide/dual", &Empty {}).await?;
+        let is_hedge = status.get("dualSidePosition").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        if !is_hedge {
+            tracing::info!("Already in one-way mode");
+            return Ok(());
+        }
+
+        tracing::info!("Account in hedge mode, switching to one-way...");
+
+        #[derive(Serialize)]
+        struct ModeParams {
             #[serde(rename = "dualSidePosition")]
             dual_side: String,
         }
 
-        let params = HedgeModeParams {
-            dual_side: "true".to_string(),
+        let params = ModeParams {
+            dual_side: "false".to_string(),
         };
 
-        let _: serde_json::Value = self.signed_request("POST", "/fapi/v1/positionSide/dual", &params).await?;
-        tracing::info!("Switched to hedge mode (dualSidePosition=true)");
+        match self.signed_request::<serde_json::Value, _>("POST", "/fapi/v1/positionSide/dual", &params).await {
+            Ok(_) => tracing::info!("Switched to one-way mode"),
+            Err(e) => {
+                tracing::warn!("Cannot switch to one-way mode: {}. Close all positions and orders first.", e);
+            }
+        }
         Ok(())
     }
 }
@@ -491,16 +667,13 @@ fn convert_order(o: BinanceOrder) -> Order {
 }
 
 fn convert_position(p: BinancePosition) -> Position {
-    let side = if p.position_side == "LONG" {
-        Side::Buy
-    } else {
-        Side::Sell
-    };
+    let amt: Decimal = p.position_amt.parse().unwrap_or_default();
+    let side = if amt >= Decimal::ZERO { Side::Buy } else { Side::Sell };
 
     Position {
         symbol: Symbol::new(p.symbol),
         side,
-        quantity: p.position_amt.parse::<Decimal>().unwrap_or_default().abs(),
+        quantity: amt.abs(),
         entry_price: p.entry_price.parse().unwrap_or_default(),
         unrealized_pnl: p.unrealized_pnl.parse().unwrap_or_default(),
         leverage: p.leverage.parse().unwrap_or(1),
@@ -511,11 +684,12 @@ fn convert_position(p: BinancePosition) -> Position {
 }
 
 fn convert_ticker(t: BinanceTicker, symbol: &Symbol) -> Ticker {
+    let last: Decimal = t.last_price.parse().unwrap_or_default();
     Ticker {
         symbol: symbol.clone(),
-        last_price: t.last_price.parse().unwrap_or_default(),
-        bid_price: t.bid_price.parse().unwrap_or_default(),
-        ask_price: t.ask_price.parse().unwrap_or_default(),
+        last_price: last,
+        bid_price: t.bid_price.and_then(|s| s.parse().ok()).unwrap_or(last),
+        ask_price: t.ask_price.and_then(|s| s.parse().ok()).unwrap_or(last),
         volume_24h: t.volume.parse().unwrap_or_default(),
         price_change_24h: t.price_change_percent.parse().unwrap_or_default(),
     }

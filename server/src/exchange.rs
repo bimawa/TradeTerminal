@@ -99,10 +99,10 @@ impl ExchangeClientWrapper {
         }
     }
 
-    pub async fn switch_to_hedge_mode(&self) -> Result<()> {
+    pub async fn ensure_position_mode(&self) -> Result<()> {
         match self {
             ExchangeClientWrapper::Bybit(c) => c.switch_to_hedge_mode().await,
-            ExchangeClientWrapper::Binance(c) => c.switch_to_hedge_mode().await,
+            ExchangeClientWrapper::Binance(c) => c.ensure_one_way_mode().await,
         }
     }
 }

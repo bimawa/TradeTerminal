@@ -24,12 +24,67 @@ use crate::config::Config;
 use crate::db;
 use crate::exchange::{ExchangeClientWrapper, ExchangeWebSocketWrapper, WsEvent};
 
+fn parse_binance_order(data: &serde_json::Value) -> Option<Vec<trade_shared::Order>> {
+    let o = data.get("o")?;
+    let status = match o.get("X")?.as_str()? {
+        "NEW" => trade_shared::OrderStatus::New,
+        "PARTIALLY_FILLED" => trade_shared::OrderStatus::PartiallyFilled,
+        "FILLED" => trade_shared::OrderStatus::Filled,
+        "CANCELED" => trade_shared::OrderStatus::Cancelled,
+        "EXPIRED" | "EXPIRED_IN_MATCH" => trade_shared::OrderStatus::Cancelled,
+        _ => trade_shared::OrderStatus::Rejected,
+    };
+    let side = if o.get("S")?.as_str()? == "BUY" { Side::Buy } else { Side::Sell };
+    let order_type = if o.get("ot")?.as_str()? == "MARKET" { OrderType::Market } else { OrderType::Limit };
+    let price_str = o.get("p")?.as_str()?;
+    let price = Decimal::from_str(price_str).ok().filter(|d| !d.is_zero());
+    let avg_str = o.get("ap")?.as_str()?;
+    let average_price = Decimal::from_str(avg_str).ok().filter(|d| !d.is_zero());
+    let time_ms = o.get("T")?.as_i64()?;
+
+    Some(vec![trade_shared::Order {
+        id: o.get("i")?.as_u64()?.to_string(),
+        symbol: Symbol::new(o.get("s")?.as_str()?.to_string()),
+        side,
+        order_type,
+        quantity: Decimal::from_str(o.get("q")?.as_str()?).ok()?,
+        filled_quantity: Decimal::from_str(o.get("z")?.as_str()?).unwrap_or_default(),
+        price,
+        average_price,
+        status,
+        created_at: chrono::DateTime::from_timestamp_millis(time_ms).unwrap_or_else(chrono::Utc::now),
+    }])
+}
+
+fn parse_binance_position(data: &serde_json::Value) -> Option<Vec<trade_shared::Position>> {
+    let positions_arr = data.get("a")?.get("P")?.as_array()?;
+    let mut result = Vec::new();
+    for p in positions_arr {
+        let pa: Decimal = Decimal::from_str(p.get("pa")?.as_str()?).ok()?;
+        let side = if pa >= Decimal::ZERO { Side::Buy } else { Side::Sell };
+        result.push(trade_shared::Position {
+            symbol: Symbol::new(p.get("s")?.as_str()?.to_string()),
+            side,
+            quantity: pa.abs(),
+            entry_price: Decimal::from_str(p.get("ep")?.as_str()?).unwrap_or_default(),
+            unrealized_pnl: Decimal::from_str(p.get("up")?.as_str()?).unwrap_or_default(),
+            leverage: 0,
+            take_profit: None,
+            stop_loss: None,
+            trailing_stop: None,
+        });
+    }
+    Some(result)
+}
+
 pub async fn run(config: Config, db: Arc<redb::Database>) -> Result<()> {
     let listener = TcpListener::bind(&config.listen_addr)
         .await
         .context(format!("Failed to bind to {}", config.listen_addr))?;
     let exchange_client = Arc::new(ExchangeClientWrapper::new(&config));
     let exchange_ws = Arc::new(ExchangeWebSocketWrapper::new(&config));
+
+    exchange_client.ensure_position_mode().await?;
 
     let tls_acceptor = if config.tls_enabled {
         let tls_config = tls::load_tls_config(
@@ -191,8 +246,11 @@ async fn handle_connection(
         while let Some(event) = ws_event_rx.recv().await {
             let msg = match event {
                 WsEvent::OrderUpdate(data) => {
-                    match serde_json::from_value::<Vec<trade_shared::Order>>(data.clone()) {
-                        Ok(orders) => {
+                    let parsed = serde_json::from_value::<Vec<trade_shared::Order>>(data.clone())
+                        .ok()
+                        .or_else(|| parse_binance_order(&data));
+                    match parsed {
+                        Some(orders) => {
                             for order in &orders {
                                 if matches!(order.status, trade_shared::OrderStatus::Filled | trade_shared::OrderStatus::PartiallyFilled) {
                                     if let Ok(Some(pending)) = db::load_pending_autostop(&db_for_ws, &order.id) {
@@ -301,15 +359,18 @@ async fn handle_connection(
 
                             Some(ServerMessage::new(ServerPayload::Orders(orders)))
                         }
-                        Err(e) => {
-                            tracing::warn!(error = %e, data = ?data, "Failed to parse order update");
+                        None => {
+                            tracing::warn!(data = ?data, "Failed to parse order update");
                             None
                         }
                     }
                 }
                 WsEvent::PositionUpdate(data) => {
-                    match serde_json::from_value::<Vec<trade_shared::Position>>(data.clone()) {
-                        Ok(positions) => {
+                    let parsed = serde_json::from_value::<Vec<trade_shared::Position>>(data.clone())
+                        .ok()
+                        .or_else(|| parse_binance_position(&data));
+                    match parsed {
+                        Some(positions) => {
                             for position in &positions {
                                 if position.quantity == rust_decimal::Decimal::ZERO {
                                     let symbol = &position.symbol;
@@ -393,8 +454,8 @@ async fn handle_connection(
                             }
                             Some(ServerMessage::new(ServerPayload::Positions(positions)))
                         }
-                        Err(e) => {
-                            tracing::warn!(error = %e, data = ?data, "Failed to parse position update");
+                        None => {
+                            tracing::warn!(data = ?data, "Failed to parse position update");
                             None
                         }
                     }
