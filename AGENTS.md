@@ -344,6 +344,82 @@ ACE (Agentic Context Engineering) ensures framework optimization is data-driven,
 **Principle:** No release without guarantee it's better than the previous one
 **Documentation:** `@.genie/agents/qa/README.md` (260+ test items, 18 scenarios, evidence-backed, self-improving)
 
+## VPS Deployment Cheat Sheet
+
+**VPS:** `root@2.57.241.25`, path: `/opt/trade-terminal/`
+**Shell:** fish (local Mac + VPS) — `${VAR:-default}` bash syntax doesn't work
+**SSH key:** ED25519-SK hardware key, requires physical PIN on each connection
+
+### Build & Deploy
+
+```bash
+just build-linux-server-amd64
+just deploy-server
+```
+
+### Upload docker-compose to VPS
+
+```bash
+scp docker-compose.vps.yml root@2.57.241.25:/opt/trade-terminal/
+```
+
+### Upload certs to VPS
+
+```bash
+scp certs/server.crt certs/server.key root@2.57.241.25:/opt/trade-terminal/certs/
+```
+
+### VPS: Start/stop/restart service
+
+```bash
+ssh root@2.57.241.25
+cd /opt/trade-terminal
+docker compose -f docker-compose.vps.yml up -d
+docker compose -f docker-compose.vps.yml logs -f
+docker compose -f docker-compose.vps.yml restart
+docker compose -f docker-compose.vps.yml down
+```
+
+### VPS: .env key paths (inside container)
+
+```
+TLS_CERT_PATH=/app/certs/server.crt
+TLS_KEY_PATH=/app/certs/server.key
+```
+
+### Generate TLS certs
+
+```bash
+cargo run --bin generate-cert -- --ip 2.57.241.25
+```
+
+Certs saved to `certs/server.crt`, `certs/server.key`, `certs/fingerprint.txt`.
+
+### Client .env for TLS
+
+```
+SERVER_URL=wss://2.57.241.25:9000
+TLS_CERT_FINGERPRINT=<value from certs/fingerprint.txt>
+```
+
+### Full deploy cycle (build + upload + restart)
+
+```bash
+just build-linux-server-amd64
+scp dist/trade-server-linux-amd64 root@2.57.241.25:/opt/trade-terminal/
+ssh root@2.57.241.25 "cd /opt/trade-terminal && docker compose -f docker-compose.vps.yml restart"
+```
+
+### Files on VPS (`/opt/trade-terminal/`)
+
+```
+trade-server-linux-amd64    # server binary
+docker-compose.vps.yml      # docker compose config
+.env                        # config (API keys, TLS, auth)
+certs/server.crt            # TLS certificate
+certs/server.key            # TLS private key
+```
+
 ## Quick Reference
 
 **Check active tasks:**

@@ -3,28 +3,59 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::Instant;
-use trade_shared::{ClientMessage, ClientPayload, PersistedActivityStopState, ServerMessage, ServerPayload};
+use trade_shared::{ClientMessage, ClientPayload, Order, PersistedActivityStopState, Position, ServerMessage, ServerPayload, Ticker};
 
 use crate::exchange::ExchangeClientWrapper;
 use crate::db;
 use crate::server::ActivityStopState;
 
+struct CachedData<T> {
+    data: T,
+    fetched_at: Instant,
+}
+
+impl<T: Clone> CachedData<T> {
+    fn new(data: T) -> Self {
+        Self { data, fetched_at: Instant::now() }
+    }
+
+    fn is_fresh(&self, ttl_ms: u64) -> bool {
+        self.fetched_at.elapsed().as_millis() < ttl_ms as u128
+    }
+}
+
+const CACHE_TTL_MS: u64 = 2000;
+
 pub struct ClientHandler {
     exchange: Arc<ExchangeClientWrapper>,
     activity_stop_state: Arc<Mutex<Option<ActivityStopState>>>,
     db: Arc<redb::Database>,
+    cache_positions: Mutex<Option<CachedData<Vec<Position>>>>,
+    cache_orders: Mutex<Option<CachedData<Vec<Order>>>>,
+    cache_ticker: Mutex<Option<CachedData<Ticker>>>,
 }
 
 impl ClientHandler {
     pub fn new(exchange: Arc<ExchangeClientWrapper>, activity_stop_state: Arc<Mutex<Option<ActivityStopState>>>, db: Arc<redb::Database>) -> Self {
-        Self { exchange, activity_stop_state, db }
+        Self {
+            exchange,
+            activity_stop_state,
+            db,
+            cache_positions: Mutex::new(None),
+            cache_orders: Mutex::new(None),
+            cache_ticker: Mutex::new(None),
+        }
     }
 
     pub async fn handle(&self, msg: ClientMessage, tx: &mpsc::Sender<ServerMessage>) -> Result<()> {
         let response = match msg.payload {
             ClientPayload::PlaceOrder(req) => {
                 match self.exchange.place_order(&req).await {
-                    Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
+                    Ok(order) => {
+                        *self.cache_orders.lock().await = None;
+                        *self.cache_positions.lock().await = None;
+                        ServerMessage::new(ServerPayload::OrderPlaced(order))
+                    }
                     Err(e) => {
                         let err_str = e.to_string();
                         if err_str.contains("10001") && err_str.contains("position idx not match position mode") {
@@ -80,7 +111,10 @@ impl ClientHandler {
 
             ClientPayload::CancelOrder { order_id } => {
                 match self.exchange.cancel_order(&trade_shared::Symbol::new("BTCUSDT"), &order_id).await {
-                    Ok(_) => ServerMessage::new(ServerPayload::OrderCancelled { order_id }),
+                    Ok(_) => {
+                        *self.cache_orders.lock().await = None;
+                        ServerMessage::new(ServerPayload::OrderCancelled { order_id })
+                    }
                     Err(e) => {
                         tracing::error!("Failed to cancel order {}: {:#}", order_id, e);
                         ServerMessage::new(ServerPayload::Error {
@@ -94,9 +128,12 @@ impl ClientHandler {
             ClientPayload::CancelAllOrders { symbol } => {
                 let symbol_display = symbol.as_ref().map(|s| s.0.as_str()).unwrap_or("all symbols");
                 match self.exchange.cancel_all_orders(symbol.as_ref()).await {
-                    Ok(_) => ServerMessage::new(ServerPayload::OrderCancelled {
-                        order_id: "all".to_string(),
-                    }),
+                    Ok(_) => {
+                        *self.cache_orders.lock().await = None;
+                        ServerMessage::new(ServerPayload::OrderCancelled {
+                            order_id: "all".to_string(),
+                        })
+                    }
                     Err(e) => {
                         tracing::error!("Failed to cancel all orders for {}: {:#}", symbol_display, e);
                         ServerMessage::new(ServerPayload::Error {
@@ -271,7 +308,11 @@ impl ClientHandler {
 
             ClientPayload::ClosePosition(req) => {
                 match self.exchange.close_position(&req.symbol, req.side).await {
-                    Ok(order) => ServerMessage::new(ServerPayload::OrderPlaced(order)),
+                    Ok(order) => {
+                        *self.cache_positions.lock().await = None;
+                        *self.cache_orders.lock().await = None;
+                        ServerMessage::new(ServerPayload::OrderPlaced(order))
+                    }
                     Err(e) => {
                         tracing::error!("Failed to close position for {} {:?}: {:#}", req.symbol, req.side, e);
                         ServerMessage::new(ServerPayload::OrderError {
@@ -281,33 +322,68 @@ impl ClientHandler {
                 }
             }
 
-            ClientPayload::GetPositions => match self.exchange.get_positions(None).await {
-                Ok(positions) => ServerMessage::new(ServerPayload::Positions(positions)),
-                Err(e) => {
-                    tracing::error!("Failed to get positions: {:#}", e);
-                    ServerMessage::new(ServerPayload::Error {
-                        code: 1,
-                        message: format!("Failed to get positions: {}", e),
-                    })
+            ClientPayload::GetPositions => {
+                let use_cache = self.cache_positions.lock().await
+                    .as_ref()
+                    .map_or(false, |c| c.is_fresh(CACHE_TTL_MS));
+                if use_cache {
+                    let data = self.cache_positions.lock().await.as_ref().unwrap().data.clone();
+                    ServerMessage::new(ServerPayload::Positions(data))
+                } else {
+                    match self.exchange.get_positions(None).await {
+                        Ok(positions) => {
+                            *self.cache_positions.lock().await = Some(CachedData::new(positions.clone()));
+                            ServerMessage::new(ServerPayload::Positions(positions))
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to get positions: {:#}", e);
+                            ServerMessage::new(ServerPayload::Error {
+                                code: 1,
+                                message: format!("Failed to get positions: {}", e),
+                            })
+                        }
+                    }
                 }
-            },
+            }
 
             ClientPayload::GetOrders { symbol } => {
-                let symbol_display = symbol.as_ref().map(|s| s.0.as_str()).unwrap_or("all symbols");
-                match self.exchange.get_orders(symbol.as_ref()).await {
-                    Ok(orders) => ServerMessage::new(ServerPayload::Orders(orders)),
-                    Err(e) => {
-                        tracing::error!("Failed to get orders for {}: {:#}", symbol_display, e);
-                        ServerMessage::new(ServerPayload::Error {
-                            code: 1,
-                            message: format!("Failed to get orders for {}: {}", symbol_display, e),
-                        })
+                let use_cache = symbol.is_none() && self.cache_orders.lock().await
+                    .as_ref()
+                    .map_or(false, |c| c.is_fresh(CACHE_TTL_MS));
+                if use_cache {
+                    let data = self.cache_orders.lock().await.as_ref().unwrap().data.clone();
+                    ServerMessage::new(ServerPayload::Orders(data))
+                } else {
+                    let symbol_display = symbol.as_ref().map(|s| s.0.as_str()).unwrap_or("all symbols");
+                    match self.exchange.get_orders(symbol.as_ref()).await {
+                        Ok(orders) => {
+                            if symbol.is_none() {
+                                *self.cache_orders.lock().await = Some(CachedData::new(orders.clone()));
+                            }
+                            ServerMessage::new(ServerPayload::Orders(orders))
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to get orders for {}: {:#}", symbol_display, e);
+                            ServerMessage::new(ServerPayload::Error {
+                                code: 1,
+                                message: format!("Failed to get orders for {}: {}", symbol_display, e),
+                            })
+                        }
                     }
                 }
             }
 
             ClientPayload::GetAccountInfo => {
-                let positions = self.exchange.get_positions(None).await.unwrap_or_default();
+                let use_cache = self.cache_positions.lock().await
+                    .as_ref()
+                    .map_or(false, |c| c.is_fresh(CACHE_TTL_MS));
+                let positions = if use_cache {
+                    self.cache_positions.lock().await.as_ref().unwrap().data.clone()
+                } else {
+                    let p = self.exchange.get_positions(None).await.unwrap_or_default();
+                    *self.cache_positions.lock().await = Some(CachedData::new(p.clone()));
+                    p
+                };
                 ServerMessage::new(ServerPayload::AccountInfo(trade_shared::AccountInfo {
                     balances: vec![],
                     positions,
@@ -315,14 +391,26 @@ impl ClientHandler {
             }
 
             ClientPayload::GetTicker { symbol } => {
-                match self.exchange.get_ticker(&symbol).await {
-                    Ok(ticker) => ServerMessage::new(ServerPayload::TickerUpdate(ticker)),
-                    Err(e) => {
-                        tracing::error!("Failed to get ticker for {}: {:#}", symbol, e);
-                        ServerMessage::new(ServerPayload::Error {
-                            code: 1,
-                            message: format!("Failed to get ticker for {}: {}", symbol, e),
-                        })
+                let use_cache = {
+                    let cache = self.cache_ticker.lock().await;
+                    cache.as_ref().map_or(false, |c| c.is_fresh(CACHE_TTL_MS) && c.data.symbol == symbol)
+                };
+                if use_cache {
+                    let data = self.cache_ticker.lock().await.as_ref().unwrap().data.clone();
+                    ServerMessage::new(ServerPayload::TickerUpdate(data))
+                } else {
+                    match self.exchange.get_ticker(&symbol).await {
+                        Ok(ticker) => {
+                            *self.cache_ticker.lock().await = Some(CachedData::new(ticker.clone()));
+                            ServerMessage::new(ServerPayload::TickerUpdate(ticker))
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to get ticker for {}: {:#}", symbol, e);
+                            ServerMessage::new(ServerPayload::Error {
+                                code: 1,
+                                message: format!("Failed to get ticker for {}: {}", symbol, e),
+                            })
+                        }
                     }
                 }
             }
