@@ -1,0 +1,15 @@
+services:
+  trade-server:
+    image: ubuntu:24.04
+    container_name: trade-server
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./trade-server-linux-amd64:/app/trade-server:ro
+      - ./certs:/app/certs:ro
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /usr/share/ca-certificates:/usr/share/ca-certificates:ro
+    working_dir: /app
+    command: ./trade-server
